@@ -2,6 +2,8 @@
 #include <zephyr/sys/printk.h>
 
 int main(void) {
-    printk("Hello from nRF5340!\n");
-    while (1) { k_sleep(K_SECONDS(1)); }
+    while (1) {
+        printk("Hello from nRF5340!\n");
+        k_sleep(K_SECONDS(1));
+    }
 }
