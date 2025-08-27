@@ -5,6 +5,8 @@
 #include <zephyr/bluetooth/conn.h>
 #include <zephyr/bluetooth/uuid.h>
 #include <zephyr/bluetooth/gatt.h>
+#include "wasm_interpreter.h"
+#include "wasm_test_module.h"
 
 // Custom service UUID (randomly generated)
 static const struct bt_uuid_128 custom_service_uuid = BT_UUID_INIT_128(
@@ -111,8 +113,10 @@ static void bt_ready(int err)
 int main(void)
 {
 	int err;
+	wasm_interpreter_t wasm_interpreter;
 
 	printk("Starting BLE Peripheral with Writable Characteristic\n");
+	printk("Phase 1: Basic WASM Interpreter Integration\n");
 
 	// Initialize the Bluetooth subsystem
 	err = bt_enable(bt_ready);
@@ -124,8 +128,39 @@ int main(void)
 	// Register connection callbacks
 	bt_conn_cb_register(&conn_callbacks);
 
+	// Initialize WASM interpreter
+	printk("Initializing WASM interpreter...\n");
+	err = wasm_interpreter_init(&wasm_interpreter);
+	if (err) {
+		printk("WASM interpreter init failed (err %d)\n", err);
+		return 0;
+	}
+
+	// Load test WASM module
+	printk("Loading test WASM module...\n");
+	err = wasm_interpreter_load_bytecode(&wasm_interpreter, 
+	                                    test_wasm_module, 
+	                                    TEST_WASM_MODULE_SIZE);
+	if (err) {
+		printk("WASM module load failed (err %d)\n", err);
+		return 0;
+	}
+
+	// Execute test WASM module
+	printk("Executing test WASM module...\n");
+	err = wasm_interpreter_execute(&wasm_interpreter);
+	if (err) {
+		printk("WASM execution failed (err %d)\n", err);
+		return 0;
+	}
+
+	printk("WASM integration Phase 1 complete!\n");
+
 	while (1) {
-		k_sleep(K_SECONDS(5));
-		printk("BLE device running...\n");
+		k_sleep(K_SECONDS(10));
+		printk("BLE device running with WASM support...\n");
+		
+		// Periodically test WASM functionality
+		wasm_test_function();
 	}
 }

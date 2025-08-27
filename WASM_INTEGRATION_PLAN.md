@@ -11,6 +11,18 @@ This branch explores integrating a WebAssembly (WASM) interpreter into the nRF53
 
 ## Technical Approach
 
+### Phase 1: Basic WASM Interpreter (Current Focus)
+1. **WAMR Integration**: Add WebAssembly Micro Runtime (WAMR) as a Zephyr module
+2. **Simple Testing**: Use hardcoded WASM code for initial testing
+3. **Serial Output**: Print WASM execution results to serial console
+4. **Memory Management**: Implement safe memory allocation and execution
+
+### Phase 2: Dynamic WASM Injection (Future)
+1. **BLE Service**: Use existing writable characteristic for WASM code upload
+2. **Dynamic Execution**: Execute uploaded WASM code in real-time
+3. **Error Handling**: Robust error handling for malformed WASM code
+4. **Runtime Management**: Hot-swap WASM code without device restart
+
 ### 1. WASM Interpreter Selection
 
 **Primary Candidates:**
@@ -112,19 +124,20 @@ BT_GATT_SERVICE_DEFINE(wasm_service,
 
 ### 7. Development Phases
 
-#### Phase 1: Foundation (Week 1)
+#### Phase 1: Foundation - Basic WASM Interpreter (Current)
 - [ ] Research WAMR integration with Zephyr
 - [ ] Add WAMR module to project
 - [ ] Basic WASM runtime initialization
-- [ ] Simple WASM module execution test
+- [ ] Simple WASM module execution test with serial output
+- [ ] Memory management and error handling
 
-#### Phase 2: BLE Integration (Week 2)
-- [ ] Extend BLE service for WASM upload
+#### Phase 2: BLE Integration - Dynamic Code Injection (Future)
+- [ ] Use existing BLE characteristic for WASM bytecode upload
 - [ ] Implement bytecode validation
-- [ ] Basic execution pipeline
-- [ ] Error handling
+- [ ] Dynamic execution pipeline
+- [ ] Hot-swap WASM code at runtime
 
-#### Phase 3: Advanced Features (Week 3)
+#### Phase 3: Advanced Features (Future)
 - [ ] WASI support for system calls
 - [ ] Memory management optimization
 - [ ] Performance tuning
