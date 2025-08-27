@@ -27,6 +27,29 @@ static uint8_t data_length = 0;
 // wasm3 runtime instance
 static wasm3_runtime_t wasm3_runtime;
 
+// Callback for when the characteristic is read
+static ssize_t on_read(struct bt_conn *conn,
+		       const struct bt_gatt_attr *attr,
+		       void *buf,
+		       uint16_t len,
+		       uint16_t offset)
+{
+	printk("Characteristic read request - offset: %d, len: %d\n", offset, len);
+	
+	// Return a simple message
+	const char *msg = "WASM3 Ready";
+	uint16_t msg_len = strlen(msg);
+	
+	if (offset >= msg_len) {
+		return BT_GATT_ERR(BT_ATT_ERR_INVALID_OFFSET);
+	}
+	
+	len = (len < (msg_len - offset)) ? len : (msg_len - offset);
+	memcpy(buf, msg + offset, len);
+	
+	return len;
+}
+
 // Callback for when the characteristic is written to
 static ssize_t on_write(struct bt_conn *conn,
 			const struct bt_gatt_attr *attr,
@@ -35,6 +58,8 @@ static ssize_t on_write(struct bt_conn *conn,
 			uint16_t offset,
 			uint8_t flags)
 {
+	printk("Characteristic write request - offset: %d, len: %d, flags: %d\n", offset, len, flags);
+	
 	// Store the received data
 	if (len <= sizeof(received_data)) {
 		memcpy(received_data, buf, len);
@@ -66,10 +91,10 @@ static ssize_t on_write(struct bt_conn *conn,
 			// Load the received WASM data
 			if (wasm3_load_module(&wasm3_runtime, received_data, len) == 0) {
 				if (wasm3_compile_module(&wasm3_runtime) == 0) {
-					// Try to call a function
+					// Try to call the "add" function
 					int result;
-					if (wasm3_call_function(&wasm3_runtime, "main", NULL, 0, &result) == 0) {
-						printk("WASM function executed successfully with wasm3, result: %d\n", result);
+					if (wasm3_call_function(&wasm3_runtime, "add", NULL, 0, &result) == 0) {
+						printk("WASM function 'add' executed successfully with wasm3, result: %d\n", result);
 					}
 				}
 			}
@@ -85,9 +110,9 @@ static ssize_t on_write(struct bt_conn *conn,
 BT_GATT_SERVICE_DEFINE(custom_service,
 	BT_GATT_PRIMARY_SERVICE(&custom_service_uuid.uuid),
 	BT_GATT_CHARACTERISTIC(&custom_char_uuid.uuid,
-			       BT_GATT_CHRC_WRITE,
-			       BT_GATT_PERM_WRITE,
-			       NULL, on_write, NULL),
+			       BT_GATT_CHRC_READ | BT_GATT_CHRC_WRITE,
+			       BT_GATT_PERM_READ | BT_GATT_PERM_WRITE,
+			       on_read, on_write, NULL),
 );
 
 static void connected(struct bt_conn *conn, uint8_t err)

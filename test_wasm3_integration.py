@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Test script for wasm3 integration on nRF5340
-Sends a minimal WASM binary via BLE to test the wasm3 wrapper
+Sends a proper WASM binary via BLE to test the wasm3 wrapper
 """
 
 import asyncio
@@ -14,11 +14,32 @@ DEVICE_NAME = "Dan5340BLE"
 # Service UUID discovered from debug output (byte-reversed from our code)
 CUSTOM_SERVICE_UUID = "bc9a7856-3412-3412-3412-341278563412"
 
-# Minimal WASM binary (just the magic number and version for testing)
-# This is a minimal valid WASM module that should trigger our wasm3 wrapper
-MINIMAL_WASM = bytes([
+# A simple WASM module that exports a function called "add"
+# This is a minimal but complete WASM module that adds two i32 values
+SIMPLE_WASM = bytes([
+    # WASM magic number and version
     0x00, 0x61, 0x73, 0x6d,  # WASM magic number
     0x01, 0x00, 0x00, 0x00,  # Version 1
+    
+    # Type section (1)
+    0x01, 0x07, 0x01,        # Section 1, length 7, 1 type
+    0x60, 0x02, 0x7f, 0x7f, 0x01, 0x7f,  # func (i32, i32) -> i32
+    
+    # Function section (3)
+    0x03, 0x02, 0x01, 0x00,  # Section 3, length 2, 1 function, type index 0
+    
+    # Export section (7)
+    0x07, 0x0a, 0x01,        # Section 7, length 10, 1 export
+    0x03, 0x61, 0x64, 0x64,  # String "add" (length 3)
+    0x00, 0x00,              # Export kind 0 (function), function index 0
+    
+    # Code section (10)
+    0x0a, 0x04, 0x01,        # Section 10, length 4, 1 function
+    0x02, 0x00,              # Function body size 2, 0 locals
+    0x20, 0x00,              # local.get 0 (get first argument)
+    0x20, 0x01,              # local.get 1 (get second argument)
+    0x6a,                    # i32.add
+    0x0b,                    # end
 ])
 
 async def find_device():
@@ -36,7 +57,7 @@ async def find_device():
     return None
 
 async def test_wasm3_integration():
-    """Test the wasm3 integration by sending a minimal WASM binary"""
+    """Test the wasm3 integration by sending a proper WASM binary"""
     device = await find_device()
     if not device:
         return
@@ -85,11 +106,12 @@ async def test_wasm3_integration():
         
         print(f"Found writable characteristic: {writable_char.uuid}")
         
-        # Send the minimal WASM binary
-        print(f"Sending minimal WASM binary ({len(MINIMAL_WASM)} bytes)...")
-        print(f"WASM bytes: {' '.join(f'{b:02x}' for b in MINIMAL_WASM)}")
+        # Send the proper WASM binary
+        print(f"Sending WASM binary ({len(SIMPLE_WASM)} bytes)...")
+        print(f"WASM bytes: {' '.join(f'{b:02x}' for b in SIMPLE_WASM)}")
+        print("This WASM module exports a function called 'add' that adds two i32 values")
         
-        await client.write_gatt_char(writable_char.uuid, MINIMAL_WASM)
+        await client.write_gatt_char(writable_char.uuid, SIMPLE_WASM)
         print("WASM binary sent successfully!")
         
         # Wait a bit for processing
