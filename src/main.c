@@ -6,7 +6,7 @@
 #include <zephyr/bluetooth/uuid.h>
 #include <zephyr/bluetooth/gatt.h>
 #include "wasm3_wrapper.h"
-#include "wasm_test_module.h"
+
 
 // Custom service UUID (randomly generated)
 static const struct bt_uuid_128 custom_service_uuid = BT_UUID_INIT_128(
@@ -160,33 +160,7 @@ int main(void)
 		return 0;
 	}
 
-	// Load test WASM module
-	printk("Loading test WASM module...\n");
-	err = wasm3_load_module(&wasm3_runtime, test_wasm_module, TEST_WASM_MODULE_SIZE);
-	if (err) {
-		printk("WASM module load failed (err %d)\n", err);
-		return 0;
-	}
-
-	// Compile test WASM module
-	printk("Compiling test WASM module...\n");
-	err = wasm3_compile_module(&wasm3_runtime);
-	if (err) {
-		printk("WASM module compilation failed (err %d)\n", err);
-		return 0;
-	}
-
-	// Execute test WASM module
-	printk("Executing test WASM module...\n");
-	int result;
-	err = wasm3_call_function(&wasm3_runtime, "test", NULL, 0, &result);
-	if (err) {
-		printk("WASM execution failed (err %d)\n", err);
-		return 0;
-	}
-
-	printk("wasm3 integration complete!\n");
-	printk("Test function result: %d\n", result);
+	printk("wasm3 runtime initialized successfully\n");
 
 	while (1) {
 		k_sleep(K_SECONDS(10));

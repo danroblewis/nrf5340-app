@@ -11,6 +11,9 @@ from bleak import BleakScanner, BleakClient
 # Device name to look for
 DEVICE_NAME = "Dan5340BLE"
 
+# Service UUID discovered from debug output (byte-reversed from our code)
+CUSTOM_SERVICE_UUID = "bc9a7856-3412-3412-3412-341278563412"
+
 # Minimal WASM binary (just the magic number and version for testing)
 # This is a minimal valid WASM module that should trigger our wasm3 wrapper
 MINIMAL_WASM = bytes([
@@ -45,17 +48,26 @@ async def test_wasm3_integration():
         
         # Discover services
         print("Discovering services...")
-        services = await client.discover_services()
+        services = client.services
         
-        # Look for our custom service
+        print("Available services:")
+        for service in services:
+            print(f"  Service: {service.uuid}")
+            for char in service.characteristics:
+                print(f"    Characteristic: {char.uuid} - Properties: {char.properties}")
+        
+        # Look for our custom service using the discovered UUID
         custom_service = None
         for service in services:
-            if service.uuid.startswith("12345678"):
+            if service.uuid == CUSTOM_SERVICE_UUID:
                 custom_service = service
                 break
         
         if not custom_service:
-            print("Custom service not found!")
+            print(f"Custom service {CUSTOM_SERVICE_UUID} not found!")
+            print("Available service UUIDs:")
+            for service in services:
+                print(f"  {service.uuid}")
             return
         
         print(f"Found custom service: {custom_service.uuid}")
