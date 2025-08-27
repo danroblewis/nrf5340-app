@@ -5,7 +5,7 @@
 #include <zephyr/bluetooth/conn.h>
 #include <zephyr/bluetooth/uuid.h>
 #include <zephyr/bluetooth/gatt.h>
-#include "wamr_wrapper.h"
+#include "wasm3_wrapper.h"
 #include "wasm_test_module.h"
 
 // Custom service UUID (randomly generated)
@@ -24,8 +24,8 @@ static const struct bt_uuid_128 custom_char_uuid = BT_UUID_INIT_128(
 static uint8_t received_data[256];
 static uint8_t data_length = 0;
 
-// WAMR runtime instance
-static wamr_runtime_t wamr_runtime;
+// wasm3 runtime instance
+static wasm3_runtime_t wasm3_runtime;
 
 // Callback for when the characteristic is written to
 static ssize_t on_write(struct bt_conn *conn,
@@ -61,15 +61,15 @@ static ssize_t on_write(struct bt_conn *conn,
 		// Try to execute the received data as WASM if it's valid
 		if (len >= 4 && received_data[0] == 0x00 && received_data[1] == 0x61 && 
 		    received_data[2] == 0x73 && received_data[3] == 0x6d) {
-			printk("Valid WASM binary detected! Loading...\n");
+			printk("Valid WASM binary detected! Loading with wasm3...\n");
 			
 			// Load the received WASM data
-			if (wamr_load_module(&wamr_runtime, received_data, len) == 0) {
-				if (wamr_instantiate_module(&wamr_runtime) == 0) {
+			if (wasm3_load_module(&wasm3_runtime, received_data, len) == 0) {
+				if (wasm3_compile_module(&wasm3_runtime) == 0) {
 					// Try to call a function
 					int result;
-					if (wamr_call_function(&wamr_runtime, "main", NULL, 0, &result) == 0) {
-						printk("WASM function executed successfully, result: %d\n", result);
+					if (wasm3_call_function(&wasm3_runtime, "main", NULL, 0, &result) == 0) {
+						printk("WASM function executed successfully with wasm3, result: %d\n", result);
 					}
 				}
 			}
@@ -133,17 +133,14 @@ static void bt_ready(int err)
 int main(void)
 {
 	int err;
-	wamr_config_t wamr_config = {
+	wasm3_config_t wasm3_config = {
 		.stack_size = 8192,
 		.heap_size = 16384,
-		.max_memory_pages = 256,
-		.enable_gc = false,
-		.enable_simd = false,
-		.enable_ref_types = false
+		.enable_tracing = false
 	};
 
-	printk("Starting BLE Peripheral with WAMR Integration\n");
-	printk("Phase 2: Real WAMR Runtime Integration\n");
+	printk("Starting BLE Peripheral with wasm3 Integration\n");
+	printk("wasm3: Fast WebAssembly Interpreter\n");
 
 	// Initialize the Bluetooth subsystem
 	err = bt_enable(bt_ready);
@@ -155,45 +152,45 @@ int main(void)
 	// Register connection callbacks
 	bt_conn_cb_register(&conn_callbacks);
 
-	// Initialize WAMR runtime
-	printk("Initializing WAMR runtime...\n");
-	err = wamr_init(&wamr_runtime, &wamr_config);
+	// Initialize wasm3 runtime
+	printk("Initializing wasm3 runtime...\n");
+	err = wasm3_init(&wasm3_runtime, &wasm3_config);
 	if (err) {
-		printk("WAMR runtime init failed (err %d)\n", err);
+		printk("wasm3 runtime init failed (err %d)\n", err);
 		return 0;
 	}
 
 	// Load test WASM module
 	printk("Loading test WASM module...\n");
-	err = wamr_load_module(&wamr_runtime, test_wasm_module, TEST_WASM_MODULE_SIZE);
+	err = wasm3_load_module(&wasm3_runtime, test_wasm_module, TEST_WASM_MODULE_SIZE);
 	if (err) {
 		printk("WASM module load failed (err %d)\n", err);
 		return 0;
 	}
 
-	// Instantiate test WASM module
-	printk("Instantiating test WASM module...\n");
-	err = wamr_instantiate_module(&wamr_runtime);
+	// Compile test WASM module
+	printk("Compiling test WASM module...\n");
+	err = wasm3_compile_module(&wasm3_runtime);
 	if (err) {
-		printk("WASM module instantiation failed (err %d)\n", err);
+		printk("WASM module compilation failed (err %d)\n", err);
 		return 0;
 	}
 
 	// Execute test WASM module
 	printk("Executing test WASM module...\n");
 	int result;
-	err = wamr_call_function(&wamr_runtime, "test", NULL, 0, &result);
+	err = wasm3_call_function(&wasm3_runtime, "test", NULL, 0, &result);
 	if (err) {
 		printk("WASM execution failed (err %d)\n", err);
 		return 0;
 	}
 
-	printk("WAMR integration Phase 2 complete!\n");
+	printk("wasm3 integration complete!\n");
 	printk("Test function result: %d\n", result);
 
 	while (1) {
 		k_sleep(K_SECONDS(10));
-		printk("BLE device running with WAMR support...\n");
-		printk("Send WASM binaries via BLE to execute them!\n");
+		printk("BLE device running with wasm3 support...\n");
+		printk("Send WASM binaries via BLE to execute them with wasm3!\n");
 	}
 }
