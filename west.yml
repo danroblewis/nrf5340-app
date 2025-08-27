@@ -1,0 +1,14 @@
+manifest:
+  version: 0.14.0   # matches your west version, optional
+  defaults:
+    remote: ncs
+  remotes:
+    - name: ncs
+      url-base: https://github.com/nrfconnect
+  projects:
+    - name: sdk-nrf
+      repo-path: sdk-nrf
+      revision: v2.5.0
+      path: sdk-nrf
+  self:
+    path: myapp
