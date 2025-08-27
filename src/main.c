@@ -5,7 +5,7 @@
 #include <zephyr/bluetooth/conn.h>
 #include <zephyr/bluetooth/uuid.h>
 #include <zephyr/bluetooth/gatt.h>
-#include "wasm_interpreter.h"
+#include "wamr_wrapper.h"
 #include "wasm_test_module.h"
 
 // Custom service UUID (randomly generated)
@@ -23,6 +23,9 @@ static const struct bt_uuid_128 custom_char_uuid = BT_UUID_INIT_128(
 // Buffer to store received data
 static uint8_t received_data[256];
 static uint8_t data_length = 0;
+
+// WAMR runtime instance
+static wamr_runtime_t wamr_runtime;
 
 // Callback for when the characteristic is written to
 static ssize_t on_write(struct bt_conn *conn,
@@ -54,6 +57,23 @@ static ssize_t on_write(struct bt_conn *conn,
 			}
 		}
 		printk("\n");
+		
+		// Try to execute the received data as WASM if it's valid
+		if (len >= 4 && received_data[0] == 0x00 && received_data[1] == 0x61 && 
+		    received_data[2] == 0x73 && received_data[3] == 0x6d) {
+			printk("Valid WASM binary detected! Loading...\n");
+			
+			// Load the received WASM data
+			if (wamr_load_module(&wamr_runtime, received_data, len) == 0) {
+				if (wamr_instantiate_module(&wamr_runtime) == 0) {
+					// Try to call a function
+					int result;
+					if (wamr_call_function(&wamr_runtime, "main", NULL, 0, &result) == 0) {
+						printk("WASM function executed successfully, result: %d\n", result);
+					}
+				}
+			}
+		}
 	} else {
 		printk("Data too long (%d bytes), max is %d\n", len, sizeof(received_data));
 	}
@@ -113,10 +133,17 @@ static void bt_ready(int err)
 int main(void)
 {
 	int err;
-	wasm_interpreter_t wasm_interpreter;
+	wamr_config_t wamr_config = {
+		.stack_size = 8192,
+		.heap_size = 16384,
+		.max_memory_pages = 256,
+		.enable_gc = false,
+		.enable_simd = false,
+		.enable_ref_types = false
+	};
 
-	printk("Starting BLE Peripheral with Writable Characteristic\n");
-	printk("Phase 1: Basic WASM Interpreter Integration\n");
+	printk("Starting BLE Peripheral with WAMR Integration\n");
+	printk("Phase 2: Real WAMR Runtime Integration\n");
 
 	// Initialize the Bluetooth subsystem
 	err = bt_enable(bt_ready);
@@ -128,39 +155,45 @@ int main(void)
 	// Register connection callbacks
 	bt_conn_cb_register(&conn_callbacks);
 
-	// Initialize WASM interpreter
-	printk("Initializing WASM interpreter...\n");
-	err = wasm_interpreter_init(&wasm_interpreter);
+	// Initialize WAMR runtime
+	printk("Initializing WAMR runtime...\n");
+	err = wamr_init(&wamr_runtime, &wamr_config);
 	if (err) {
-		printk("WASM interpreter init failed (err %d)\n", err);
+		printk("WAMR runtime init failed (err %d)\n", err);
 		return 0;
 	}
 
 	// Load test WASM module
 	printk("Loading test WASM module...\n");
-	err = wasm_interpreter_load_bytecode(&wasm_interpreter, 
-	                                    test_wasm_module, 
-	                                    TEST_WASM_MODULE_SIZE);
+	err = wamr_load_module(&wamr_runtime, test_wasm_module, TEST_WASM_MODULE_SIZE);
 	if (err) {
 		printk("WASM module load failed (err %d)\n", err);
 		return 0;
 	}
 
+	// Instantiate test WASM module
+	printk("Instantiating test WASM module...\n");
+	err = wamr_instantiate_module(&wamr_runtime);
+	if (err) {
+		printk("WASM module instantiation failed (err %d)\n", err);
+		return 0;
+	}
+
 	// Execute test WASM module
 	printk("Executing test WASM module...\n");
-	err = wasm_interpreter_execute(&wasm_interpreter);
+	int result;
+	err = wamr_call_function(&wamr_runtime, "test", NULL, 0, &result);
 	if (err) {
 		printk("WASM execution failed (err %d)\n", err);
 		return 0;
 	}
 
-	printk("WASM integration Phase 1 complete!\n");
+	printk("WAMR integration Phase 2 complete!\n");
+	printk("Test function result: %d\n", result);
 
 	while (1) {
 		k_sleep(K_SECONDS(10));
-		printk("BLE device running with WASM support...\n");
-		
-		// Periodically test WASM functionality
-		wasm_test_function();
+		printk("BLE device running with WAMR support...\n");
+		printk("Send WASM binaries via BLE to execute them!\n");
 	}
 }

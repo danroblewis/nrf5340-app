@@ -1,11 +1,20 @@
+# Build artifacts
 build/
-build-*/
-zephyr/
-modules/
-.cmake/
-CMakeFiles/
-CMakeCache.txt
-*.log
+*.o
+*.obj
+*.elf
+*.hex
+*.bin
+
+# WAMR repository (external dependency)
+wasm-micro-runtime/
+
+# IDE files
+.vscode/
+.idea/
 *.swp
-__pycache__/
+*.swo
+
+# OS files
 .DS_Store
+Thumbs.db
