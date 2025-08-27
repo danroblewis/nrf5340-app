@@ -1,0 +1,11 @@
+build/
+build-*/
+zephyr/
+modules/
+.cmake/
+CMakeFiles/
+CMakeCache.txt
+*.log
+*.swp
+__pycache__/
+.DS_Store
