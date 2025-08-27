@@ -1,14 +1,11 @@
 manifest:
-  version: 0.14.0   # matches your west version, optional
-  defaults:
-    remote: ncs
+  version: "0.13"
   remotes:
     - name: ncs
-      url-base: https://github.com/nrfconnect
+      url-base: https://github.com/nrfconnect/sdk-nrf
   projects:
-    - name: sdk-nrf
-      repo-path: sdk-nrf
-      revision: v2.5.0
-      path: sdk-nrf
-  self:
-    path: myapp
+    - name: nrf
+      remote: ncs
+      revision: main
+      path: ncs
+      import: true
