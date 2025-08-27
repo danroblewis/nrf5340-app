@@ -17,6 +17,8 @@ CUSTOM_SERVICE_UUID = "bc9a7856-3412-3412-3412-341278563412"
 # Characteristic UUID from C code (exact byte order, not byte-reversed)  
 CUSTOM_CHAR_UUID = "21436587-a9cb-2143-2143-214321436587"
 
+
+
 # A simple WASM module that exports a function called "add"
 # This is a minimal but complete WASM module that adds two i32 values
 SIMPLE_WASM = bytes([
@@ -46,43 +48,21 @@ SIMPLE_WASM = bytes([
 ])
 
 async def find_device():
-    """Find our BLE device by name"""
-    print(f"Scanning for device: {DEVICE_NAME}")
-    
     devices = await BleakScanner.discover(timeout=10.0)
-    
     for device in devices:
         if device.name == DEVICE_NAME:
-            print(f"Found device: {device.name} ({device.address})")
             return device
-    
     print("Device not found!")
     return None
 
+
 async def test_wasm3_integration():
-    """Test the wasm3 integration by sending a proper WASM binary"""
     device = await find_device()
     if not device:
         return
     
-    print(f"Connecting to {device.name}...")
-    
     async with BleakClient(device.address) as client:
-        print("Connected!")
-        
-        # Request larger MTU for bigger packets
-        print("Requesting larger MTU...")
-        try:
-            await client.request_mtu(247)
-            print("MTU request sent successfully")
-        except Exception as e:
-            print(f"MTU request failed: {e}")
-        
-        # Discover services
-        print("Discovering services...")
         services = client.services
-        
-        print("Available services:")
         for service in services:
             print(f"  Service: {service.uuid}")
             for char in service.characteristics:
@@ -94,67 +74,43 @@ async def test_wasm3_integration():
             if service.uuid == CUSTOM_SERVICE_UUID:
                 custom_service = service
                 break
-        
-        if not custom_service:
-            print(f"Custom service {CUSTOM_SERVICE_UUID} not found!")
-            print("Available service UUIDs:")
-            for service in services:
-                print(f"  {service.uuid}")
-            return
-        
+
         print(f"Found custom service: {custom_service.uuid}")
         
         # Look for the writable characteristic using the specific UUID
-        writable_char = None
-        for char in custom_service.characteristics:
-            if char.uuid == CUSTOM_CHAR_UUID:
-                writable_char = char
-                break
-        
-        if not writable_char:
-            print(f"Characteristic {CUSTOM_CHAR_UUID} not found!")
-            print("Available characteristics:")
-            for char in custom_service.characteristics:
-                print(f"  {char.uuid} - Properties: {char.properties}")
-            return
-        
-        print(f"Found writable characteristic: {writable_char.uuid}")
-        
-        # Send the proper WASM binary 10 times with 5-second intervals
-        print(f"Sending WASM binary ({len(SIMPLE_WASM)} bytes) 10 times with 5-second intervals...")
-        print(f"WASM bytes: {' '.join(f'{b:02x}' for b in SIMPLE_WASM)}")
-        print("This WASM module exports a function called 'add' that adds two i32 values")
+        writable_char = custom_service.characteristics[0]
 
-        for attempt in range(1, 11):
+        for attempt in range(11, 80, 3):
+            # Wait 5 seconds before next attempt (except for the last one)
+            await asyncio.sleep(2)
+            
             print(f"\n--- Attempt {attempt}/10 ---")
             
+
+            # # Try to use write-without-response first
+            # try:
+            #     resp = await client.write_gatt_char(writable_char.uuid, b"asdfasfasfd", response=False)
+            #     print(f"Response: {resp}")
+            #     print(f"WASM binary sent successfully asdfasfasfd with write-without-response! (Attempt {attempt}/10)")
+            # except Exception as e:
+            #     print("Write failed: {e}")
+            
+            # await asyncio.sleep(2)
+
             # Try to use write-without-response first
             try:
-                print("Attempting write-without-response...")
-                await client.write_gatt_char(writable_char.uuid, SIMPLE_WASM, response=False)
-                print(f"WASM binary sent successfully with write-without-response! (Attempt {attempt}/10)")
+                # data_to_send = SIMPLE_WASM[:19]
+                data_to_send = SIMPLE_WASM[:attempt]
+                resp = await client.write_gatt_char(writable_char.uuid, data_to_send)
+                print(f"Response: {resp}")
+                print(f"WASM binary sent successfully with write-without-response! Sent first {attempt} bytes. (Attempt {attempt}/10)")
             except Exception as e:
-                print(f"Write-without-response failed: {e}")
-                try:
-                    print("Attempting regular write...")
-                    await client.write_gatt_char(writable_char.uuid, SIMPLE_WASM)
-                    print(f"WASM binary sent successfully with regular write! (Attempt {attempt}/10)")
-                except Exception as e2:
-                    print(f"Regular write also failed: {e2}")
-                    print(f"Attempt {attempt}/10 failed completely")
-                    continue
+                print(f"Write failed: {e}")
             
-            # Wait 5 seconds before next attempt (except for the last one)
-            if attempt < 10:
-                print(f"Waiting 5 seconds before next attempt...")
-                await asyncio.sleep(5)
         
         print("\nAll 10 attempts completed!")
 
 if __name__ == "__main__":
-    print("Testing wasm3 integration on nRF5340")
-    print("=" * 50)
-    
     try:
         asyncio.run(test_wasm3_integration())
     except KeyboardInterrupt:

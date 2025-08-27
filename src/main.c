@@ -21,8 +21,10 @@ static const struct bt_uuid_128 custom_char_uuid = BT_UUID_INIT_128(
 );
 
 // Buffer to store received data
-static uint8_t received_data[256];
-static uint8_t data_length = 0;
+static uint8_t received_data[4096];  // Increased buffer size
+static uint16_t data_length = 0;
+static uint16_t total_received = 0;
+static bool receiving_wasm = false;
 
 // wasm3 runtime instance
 static wasm3_runtime_t wasm3_runtime;
@@ -35,18 +37,21 @@ static ssize_t on_read(struct bt_conn *conn,
 		       uint16_t offset)
 {
 	printk("Characteristic read request - offset: %d, len: %d\n", offset, len);
+	printk("Connection handle: %d\n", bt_conn_index(conn));
 	
 	// Return a simple message
 	const char *msg = "WASM3 Ready";
 	uint16_t msg_len = strlen(msg);
 	
 	if (offset >= msg_len) {
+		printk("Invalid offset: %d >= %d\n", offset, msg_len);
 		return BT_GATT_ERR(BT_ATT_ERR_INVALID_OFFSET);
 	}
 	
 	len = (len < (msg_len - offset)) ? len : (msg_len - offset);
 	memcpy(buf, msg + offset, len);
 	
+	printk("Read response sent: %d bytes\n", len);
 	return len;
 }
 
@@ -58,38 +63,47 @@ static ssize_t on_write(struct bt_conn *conn,
 			uint16_t offset,
 			uint8_t flags)
 {
+	printk("\n=== BLE WRITE RECEIVED ===\n");
 	printk("Characteristic write request - offset: %d, len: %d, flags: %d\n", offset, len, flags);
+	printk("Connection handle: %d\n", bt_conn_index(conn));
 	
-	// Store the received data
-	if (len <= sizeof(received_data)) {
-		memcpy(received_data, buf, len);
-		data_length = len;
+	// Check if this is the start of a new WASM transmission
+	if (len >= 4 && !receiving_wasm && 
+	    ((uint8_t*)buf)[0] == 0x00 && ((uint8_t*)buf)[1] == 0x61 && 
+	    ((uint8_t*)buf)[2] == 0x73 && ((uint8_t*)buf)[3] == 0x6d) {
+		printk("New WASM transmission started\n");
+		receiving_wasm = true;
+		total_received = 0;
+		data_length = 0;
+	}
+	
+	// Store the received data chunk
+	if (receiving_wasm && (total_received + len) <= sizeof(received_data)) {
+		memcpy(received_data + total_received, buf, len);
+		total_received += len;
+		data_length = total_received;
+		
+		printk("Chunk received: %d bytes, total: %d bytes\n", len, total_received);
 		
 		// Print received data to serial console
 		printk("Received %d bytes: ", len);
 		for (int i = 0; i < len; i++) {
-			printk("%02x ", received_data[i]);
+			printk("%02x ", ((uint8_t*)buf)[i]);
 		}
 		printk("\n");
 		
-		// Also print as ASCII if it's printable
-		printk("ASCII: ");
-		for (int i = 0; i < len; i++) {
-			if (received_data[i] >= 32 && received_data[i] <= 126) {
-				printk("%c", received_data[i]);
-			} else {
-				printk(".");
-			}
-		}
-		printk("\n");
+		// // Sleep to ensure debug messages are printed
+		// printk("Sleeping for 1 second to ensure debug output...\n");
+		// k_sleep(K_SECONDS(1));
 		
-		// Try to execute the received data as WASM if it's valid
-		if (len >= 4 && received_data[0] == 0x00 && received_data[1] == 0x61 && 
+		// Try to execute the accumulated WASM data if we have enough
+		if (total_received >= 4 && received_data[0] == 0x00 && received_data[1] == 0x61 && 
 		    received_data[2] == 0x73 && received_data[3] == 0x6d) {
 			printk("Valid WASM binary detected! Loading with wasm3...\n");
+			printk("Total WASM size: %d bytes\n", total_received);
 			
 			// Load the received WASM data
-			if (wasm3_load_module(&wasm3_runtime, received_data, len) == 0) {
+			if (wasm3_load_module(&wasm3_runtime, received_data, total_received) == 0) {
 				if (wasm3_compile_module(&wasm3_runtime) == 0) {
 					// Try to call the "add" function
 					int result;
@@ -98,11 +112,19 @@ static ssize_t on_write(struct bt_conn *conn,
 					}
 				}
 			}
+			
+			// Reset for next transmission
+			receiving_wasm = false;
+			total_received = 0;
+			data_length = 0;
 		}
+	} else if (!receiving_wasm) {
+		printk("Received non-WASM data: %d bytes\n", len);
 	} else {
-		printk("Data too long (%d bytes), max is %d\n", len, sizeof(received_data));
+		printk("WASM data too long (%d + %d bytes), max is %d\n", total_received, len, sizeof(received_data));
 	}
 	
+	printk("=== BLE WRITE COMPLETED ===\n");
 	return len;
 }
 
@@ -110,7 +132,7 @@ static ssize_t on_write(struct bt_conn *conn,
 BT_GATT_SERVICE_DEFINE(custom_service,
 	BT_GATT_PRIMARY_SERVICE(&custom_service_uuid.uuid),
 	BT_GATT_CHARACTERISTIC(&custom_char_uuid.uuid,
-			       BT_GATT_CHRC_READ | BT_GATT_CHRC_WRITE,
+			       BT_GATT_CHRC_READ | BT_GATT_CHRC_WRITE | BT_GATT_CHRC_WRITE_WITHOUT_RESP,
 			       BT_GATT_PERM_READ | BT_GATT_PERM_WRITE,
 			       on_read, on_write, NULL),
 );
@@ -122,17 +144,25 @@ static void connected(struct bt_conn *conn, uint8_t err)
 		return;
 	}
 	printk("Connected\n");
+	printk("Connection handle: %d\n", bt_conn_index(conn));
+	printk("Remote address type: %d\n", bt_conn_get_dst(conn)->type);
+	
+	printk("Connection established - MTU should be configured via prj.conf\n");
 }
 
 static void disconnected(struct bt_conn *conn, uint8_t reason)
 {
 	printk("Disconnected (reason %u)\n", reason);
+	printk("Connection handle: %d\n", bt_conn_index(conn));
 }
 
 static struct bt_conn_cb conn_callbacks = {
 	.connected = connected,
 	.disconnected = disconnected,
 };
+
+// Note: MTU monitoring would require bt_gatt_cb which may not be available
+// in this Zephyr version. We'll rely on the MTU configuration in prj.conf.
 
 static void bt_ready(int err)
 {
@@ -164,6 +194,11 @@ int main(void)
 		.enable_tracing = false
 	};
 
+	printk("\n");
+	printk("========================================\n");
+	printk("nRF5340 BLE + wasm3 Integration Starting\n");
+	printk("Build: %s %s\n", __DATE__, __TIME__);
+	printk("========================================\n");
 	printk("Starting BLE Peripheral with wasm3 Integration\n");
 	printk("wasm3: Fast WebAssembly Interpreter\n");
 
@@ -189,7 +224,6 @@ int main(void)
 
 	while (1) {
 		k_sleep(K_SECONDS(10));
-		printk("BLE device running with wasm3 support...\n");
-		printk("Send WASM binaries via BLE to execute them with wasm3!\n");
+		printk(".\n");
 	}
 }
