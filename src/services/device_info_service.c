@@ -1,4 +1,5 @@
 #include "device_info_service.h"
+#include "ble_packet_handlers.h"
 #include <zephyr/sys/printk.h>
 #include <string.h>
 
@@ -8,6 +9,14 @@
  */
 
 /* ============================================================================
+ * PACKET TYPE DEFINITIONS
+ * ============================================================================ */
+
+typedef struct {
+    char text[64];  // String response for device info
+} __attribute__((packed)) device_info_string_t;
+
+/* ============================================================================
  * STATIC DATA
  * ============================================================================ */
 
@@ -15,47 +24,47 @@ static char firmware_revision[32] = DEVICE_FIRMWARE_REVISION;
 static char software_revision[32] = DEVICE_SOFTWARE_REVISION;
 
 /* ============================================================================
- * CHARACTERISTIC READ HANDLERS
+ * SIMPLIFIED CHARACTERISTIC HANDLERS
  * ============================================================================ */
 
-static ssize_t read_manufacturer_name(struct bt_conn *conn,
-                                     const struct bt_gatt_attr *attr,
-                                     void *buf, uint16_t len, uint16_t offset)
+// The macro will generate read_manufacturer_name() wrapper that calls this
+static ssize_t simple_read_manufacturer_name(device_info_string_t *response)
 {
-    return bt_gatt_attr_read(conn, attr, buf, len, offset,
-                           DEVICE_MANUFACTURER_NAME, strlen(DEVICE_MANUFACTURER_NAME));
+    strncpy(response->text, DEVICE_MANUFACTURER_NAME, sizeof(response->text) - 1);
+    response->text[sizeof(response->text) - 1] = '\0';
+    return strlen(response->text);
 }
 
-static ssize_t read_model_number(struct bt_conn *conn,
-                                const struct bt_gatt_attr *attr,
-                                void *buf, uint16_t len, uint16_t offset)
+// The macro will generate read_model_number() wrapper that calls this
+static ssize_t simple_read_model_number(device_info_string_t *response)
 {
-    return bt_gatt_attr_read(conn, attr, buf, len, offset,
-                           DEVICE_MODEL_NUMBER, strlen(DEVICE_MODEL_NUMBER));
+    strncpy(response->text, DEVICE_MODEL_NUMBER, sizeof(response->text) - 1);
+    response->text[sizeof(response->text) - 1] = '\0';
+    return strlen(response->text);
 }
 
-static ssize_t read_firmware_revision(struct bt_conn *conn,
-                                     const struct bt_gatt_attr *attr,
-                                     void *buf, uint16_t len, uint16_t offset)
+// The macro will generate read_firmware_revision() wrapper that calls this
+static ssize_t simple_read_firmware_revision(device_info_string_t *response)
 {
-    return bt_gatt_attr_read(conn, attr, buf, len, offset,
-                           firmware_revision, strlen(firmware_revision));
+    strncpy(response->text, firmware_revision, sizeof(response->text) - 1);
+    response->text[sizeof(response->text) - 1] = '\0';
+    return strlen(response->text);
 }
 
-static ssize_t read_hardware_revision(struct bt_conn *conn,
-                                     const struct bt_gatt_attr *attr,
-                                     void *buf, uint16_t len, uint16_t offset)
+// The macro will generate read_hardware_revision() wrapper that calls this
+static ssize_t simple_read_hardware_revision(device_info_string_t *response)
 {
-    return bt_gatt_attr_read(conn, attr, buf, len, offset,
-                           DEVICE_HARDWARE_REVISION, strlen(DEVICE_HARDWARE_REVISION));
+    strncpy(response->text, DEVICE_HARDWARE_REVISION, sizeof(response->text) - 1);
+    response->text[sizeof(response->text) - 1] = '\0';
+    return strlen(response->text);
 }
 
-static ssize_t read_software_revision(struct bt_conn *conn,
-                                     const struct bt_gatt_attr *attr,
-                                     void *buf, uint16_t len, uint16_t offset)
+// The macro will generate read_software_revision() wrapper that calls this
+static ssize_t simple_read_software_revision(device_info_string_t *response)
 {
-    return bt_gatt_attr_read(conn, attr, buf, len, offset,
-                           software_revision, strlen(software_revision));
+    strncpy(response->text, software_revision, sizeof(response->text) - 1);
+    response->text[sizeof(response->text) - 1] = '\0';
+    return strlen(response->text);
 }
 
 /* ============================================================================
@@ -64,26 +73,31 @@ static ssize_t read_software_revision(struct bt_conn *conn,
 
 BT_GATT_SERVICE_DEFINE(device_info_service,
     BT_GATT_PRIMARY_SERVICE(BT_UUID_DIS),
-    BT_GATT_CHARACTERISTIC(BT_UUID_DIS_MANUFACTURER_NAME,
+    BT_GATT_CHARACTERISTIC_SIMPLE(BT_UUID_DIS_MANUFACTURER_NAME,
                           BT_GATT_CHRC_READ,
                           BT_GATT_PERM_READ,
-                          read_manufacturer_name, NULL, NULL),
-    BT_GATT_CHARACTERISTIC(BT_UUID_DIS_MODEL_NUMBER,
+                          read_manufacturer_name, NULL, NULL,
+                          device_info_string_t, void),
+    BT_GATT_CHARACTERISTIC_SIMPLE(BT_UUID_DIS_MODEL_NUMBER,
                           BT_GATT_CHRC_READ,
                           BT_GATT_PERM_READ,
-                          read_model_number, NULL, NULL),
-    BT_GATT_CHARACTERISTIC(BT_UUID_DIS_FIRMWARE_REVISION,
+                          read_model_number, NULL, NULL,
+                          device_info_string_t, void),
+    BT_GATT_CHARACTERISTIC_SIMPLE(BT_UUID_DIS_FIRMWARE_REVISION,
                           BT_GATT_CHRC_READ,
                           BT_GATT_PERM_READ,
-                          read_firmware_revision, NULL, NULL),
-    BT_GATT_CHARACTERISTIC(BT_UUID_DIS_HARDWARE_REVISION,
+                          read_firmware_revision, NULL, NULL,
+                          device_info_string_t, void),
+    BT_GATT_CHARACTERISTIC_SIMPLE(BT_UUID_DIS_HARDWARE_REVISION,
                           BT_GATT_CHRC_READ,
                           BT_GATT_PERM_READ,
-                          read_hardware_revision, NULL, NULL),
-    BT_GATT_CHARACTERISTIC(BT_UUID_DIS_SOFTWARE_REVISION,
+                          read_hardware_revision, NULL, NULL,
+                          device_info_string_t, void),
+    BT_GATT_CHARACTERISTIC_SIMPLE(BT_UUID_DIS_SOFTWARE_REVISION,
                           BT_GATT_CHRC_READ,
                           BT_GATT_PERM_READ,
-                          read_software_revision, NULL, NULL),
+                          read_software_revision, NULL, NULL,
+                          device_info_string_t, void),
 );
 
 /* ============================================================================

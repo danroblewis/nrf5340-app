@@ -1,4 +1,5 @@
 #include "data_service.h"
+#include "ble_packet_handlers.h"
 #include <zephyr/sys/printk.h>
 #include <string.h>
 
@@ -6,6 +7,24 @@
  * @file data_service.c
  * @brief Custom Data Service implementation
  */
+
+/* ============================================================================
+ * PACKET TYPE DEFINITIONS
+ * ============================================================================ */
+
+typedef struct {
+    uint8_t data[20];  // Maximum BLE packet data size
+} __attribute__((packed)) data_upload_packet_t;
+
+typedef struct {
+    uint8_t data[20];  // Download data chunk
+} __attribute__((packed)) data_download_packet_t;
+
+typedef struct {
+    uint8_t transfer_status;
+    uint16_t buffer_size;
+    uint8_t reserved[3];
+} __attribute__((packed)) data_transfer_status_packet_t;
 
 /* ============================================================================
  * STATIC DATA
@@ -21,33 +40,35 @@ static const char *download_data = "Sample data from nRF5340 device";
 static uint16_t download_data_length = 0;
 
 /* ============================================================================
- * CHARACTERISTIC HANDLERS
+ * SIMPLIFIED CHARACTERISTIC HANDLERS
  * ============================================================================ */
 
-static ssize_t data_upload_write(struct bt_conn *conn,
-                                const struct bt_gatt_attr *attr,
-                                const void *buf, uint16_t len,
-                                uint16_t offset, uint8_t flags)
+// The macro will generate data_upload_write() wrapper that calls this
+static ssize_t simple_data_upload_write(const data_upload_packet_t *packet)
 {
-    const uint8_t *data = (const uint8_t *)buf;
+    printk("Data Service: Upload received %zu bytes\n", sizeof(*packet));
     
-    printk("Data Service: Upload received %d bytes\n", len);
+    // Find actual data length (exclude padding zeros)
+    uint16_t actual_len = sizeof(*packet);
+    while (actual_len > 0 && packet->data[actual_len - 1] == 0) {
+        actual_len--;
+    }
     
-    if (data_buffer_size + len > DATA_BUFFER_SIZE) {
+    if (data_buffer_size + actual_len > DATA_BUFFER_SIZE) {
         printk("Data Service: Buffer overflow, resetting\n");
         data_buffer_size = 0;
         transfer_status = TRANSFER_STATUS_ERROR;
-        return BT_GATT_ERR(BT_ATT_ERR_INSUFFICIENT_RESOURCES);
+        return -1;
     }
     
-    memcpy(data_buffer + data_buffer_size, data, len);
-    data_buffer_size += len;
+    memcpy(data_buffer + data_buffer_size, packet->data, actual_len);
+    data_buffer_size += actual_len;
     transfer_status = TRANSFER_STATUS_RECEIVING;
     
     printk("Data Service: Total received: %d bytes\n", data_buffer_size);
     
     /* Check for end marker or complete message */
-    if (len < 20) { // Assume end of transmission if less than MTU
+    if (actual_len < sizeof(*packet)) { // Assume end of transmission if not full packet
         transfer_status = TRANSFER_STATUS_COMPLETE;
         printk("Data Service: Transfer complete\n");
         
@@ -55,41 +76,43 @@ static ssize_t data_upload_write(struct bt_conn *conn,
         data_service_process_data(data_buffer, data_buffer_size);
     }
     
-    return len;
+    return sizeof(*packet);
 }
 
-static ssize_t data_download_read(struct bt_conn *conn,
-                                 const struct bt_gatt_attr *attr,
-                                 void *buf, uint16_t len, uint16_t offset)
+// The macro will generate data_download_read() wrapper that calls this
+static ssize_t simple_data_download_read(data_download_packet_t *response)
 {
-    printk("Data Service: Download request (offset: %d, len: %d)\n", offset, len);
+    printk("Data Service: Download request\n");
     
     if (download_data_length == 0) {
         download_data_length = strlen(download_data);
     }
     
-    return bt_gatt_attr_read(conn, attr, buf, len, offset,
-                           download_data, download_data_length);
+    // For simplicity, just copy the sample data into the response
+    uint16_t copy_len = (download_data_length < sizeof(response->data)) ? 
+                        download_data_length : sizeof(response->data);
+    
+    memcpy(response->data, download_data, copy_len);
+    
+    // Pad with zeros if needed
+    if (copy_len < sizeof(response->data)) {
+        memset(&response->data[copy_len], 0, sizeof(response->data) - copy_len);
+    }
+    
+    return sizeof(*response);
 }
 
-static ssize_t data_transfer_status_read(struct bt_conn *conn,
-                                        const struct bt_gatt_attr *attr,
-                                        void *buf, uint16_t len, uint16_t offset)
+// The macro will generate data_transfer_status_read() wrapper that calls this  
+static ssize_t simple_data_transfer_status_read(data_transfer_status_packet_t *status)
 {
-    uint8_t status_data[6] = {
-        transfer_status,
-        (uint8_t)(data_buffer_size & 0xFF),
-        (uint8_t)((data_buffer_size >> 8) & 0xFF),
-        0x00, // Reserved
-        0x00, // Reserved
-        0x00  // Reserved
-    };
-    
     printk("Data Service: Transfer status read (status: %d, size: %d)\n", 
            transfer_status, data_buffer_size);
     
-    return bt_gatt_attr_read(conn, attr, buf, len, offset,
-                           status_data, sizeof(status_data));
+    status->transfer_status = transfer_status;
+    status->buffer_size = data_buffer_size;
+    memset(status->reserved, 0, sizeof(status->reserved));
+    
+    return sizeof(*status);
 }
 
 /* ============================================================================
@@ -98,19 +121,22 @@ static ssize_t data_transfer_status_read(struct bt_conn *conn,
 
 BT_GATT_SERVICE_DEFINE(data_service,
     BT_GATT_PRIMARY_SERVICE(DATA_SERVICE_UUID),
-    BT_GATT_CHARACTERISTIC(DATA_UPLOAD_UUID,
+    BT_GATT_CHARACTERISTIC_SIMPLE(DATA_UPLOAD_UUID,
                           BT_GATT_CHRC_WRITE | BT_GATT_CHRC_WRITE_WITHOUT_RESP,
                           BT_GATT_PERM_WRITE,
-                          NULL, data_upload_write, NULL),
-    BT_GATT_CHARACTERISTIC(DATA_DOWNLOAD_UUID,
+                          NULL, data_upload_write, NULL,
+                          void, data_upload_packet_t),
+    BT_GATT_CHARACTERISTIC_SIMPLE(DATA_DOWNLOAD_UUID,
                           BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY,
                           BT_GATT_PERM_READ,
-                          data_download_read, NULL, NULL),
+                          data_download_read, NULL, NULL,
+                          data_download_packet_t, void),
     BT_GATT_CCC(NULL, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
-    BT_GATT_CHARACTERISTIC(DATA_TRANSFER_STATUS_UUID,
+    BT_GATT_CHARACTERISTIC_SIMPLE(DATA_TRANSFER_STATUS_UUID,
                           BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY,
                           BT_GATT_PERM_READ,
-                          data_transfer_status_read, NULL, NULL),
+                          data_transfer_status_read, NULL, NULL,
+                          data_transfer_status_packet_t, void),
     BT_GATT_CCC(NULL, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
 );
 

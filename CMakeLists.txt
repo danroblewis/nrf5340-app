@@ -26,6 +26,7 @@ target_sources(app PRIVATE
 target_include_directories(app PRIVATE 
     $ENV{NCS_ROOT}/modules/lib/wasm3/source
     src/services
+    src
 )
 
 # Build wasm3 sources directly as part of our project

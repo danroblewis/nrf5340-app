@@ -1,4 +1,5 @@
 #include "control_service.h"
+#include "ble_packet_handlers.h"
 #include <zephyr/sys/printk.h>
 #include <string.h>
 
@@ -8,12 +9,35 @@
  */
 
 /* ============================================================================
+ * PACKET TYPE DEFINITIONS
+ * ============================================================================ */
+
+typedef struct {
+    uint8_t cmd_id;
+    uint8_t param1;
+    uint8_t param2;
+    uint8_t reserved[17];
+} __attribute__((packed)) control_command_packet_t;
+
+typedef struct {
+    uint8_t cmd_id;
+    uint8_t status;
+    uint8_t result[6];
+} __attribute__((packed)) control_response_packet_t;
+
+typedef struct {
+    uint8_t device_status;
+    uint32_t uptime;
+    uint8_t reserved[3];
+} __attribute__((packed)) control_status_packet_t;
+
+/* ============================================================================
  * STATIC DATA
  * ============================================================================ */
 
 static uint8_t device_status = DEVICE_STATUS_IDLE;
-static uint8_t last_response[64];
-static uint16_t last_response_len = 0;
+static control_response_packet_t last_response;
+static bool last_response_valid = false;
 static struct bt_conn *control_conn = NULL;
 
 /* ============================================================================
@@ -22,114 +46,95 @@ static struct bt_conn *control_conn = NULL;
 
 static void control_notify_response(void)
 {
-    if (!control_conn || last_response_len == 0) {
+    if (!control_conn || !last_response_valid) {
         return;
     }
     
-    printk("Control Service: Notifying response (%d bytes)\n", last_response_len);
+    printk("Control Service: Notifying response (cmd: 0x%02x, status: 0x%02x)\n", 
+           last_response.cmd_id, last_response.status);
     /* In real implementation, would use bt_gatt_notify() */
 }
 
 /* ============================================================================
- * CHARACTERISTIC HANDLERS
+ * SIMPLIFIED CHARACTERISTIC HANDLERS
  * ============================================================================ */
 
-static ssize_t control_command_write(struct bt_conn *conn,
-                                    const struct bt_gatt_attr *attr,
-                                    const void *buf, uint16_t len,
-                                    uint16_t offset, uint8_t flags)
+// The macro will generate control_command_write() wrapper that calls this
+static ssize_t simple_control_command_write(const control_command_packet_t *packet)
 {
-    const uint8_t *data = (const uint8_t *)buf;
+    printk("Control Service: Command received: 0x%02x\n", packet->cmd_id);
     
-    if (len < 1) {
-        return BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN);
-    }
-    
-    printk("Control Service: Command received: 0x%02x\n", data[0]);
-    
-    control_conn = conn;
-    
-    switch (data[0]) {
+    last_response.cmd_id = packet->cmd_id;
+    last_response.status = RESPONSE_SUCCESS;
+
+    switch (packet->cmd_id) {
     case CMD_GET_STATUS:
-        printk("Control Service: Get status command\n");
-        last_response[0] = CMD_GET_STATUS;
-        last_response[1] = RESPONSE_SUCCESS;
-        last_response[2] = device_status;
-        last_response_len = 3;
-        control_notify_response();
+        printk("Control Service: Get status (param1: 0x%02x)\n", packet->param1);
+        last_response.result[0] = device_status;
+        memset(&last_response.result[1], 0, sizeof(last_response.result) - 1);
         break;
         
     case CMD_RESET_DEVICE:
         printk("Control Service: Reset device command (mock)\n");
-        device_status = DEVICE_STATUS_IDLE; // Reset to idle
-        last_response[0] = CMD_RESET_DEVICE;
-        last_response[1] = RESPONSE_SUCCESS;
-        last_response_len = 2;
-        control_notify_response();
+        device_status = DEVICE_STATUS_IDLE;
+        memset(last_response.result, 0, sizeof(last_response.result));
         break;
         
     case CMD_SET_CONFIG:
-        if (len >= 2) {
-            printk("Control Service: Set config command (value: 0x%02x)\n", data[1]);
-            last_response[0] = CMD_SET_CONFIG;
-            last_response[1] = RESPONSE_SUCCESS;
-            last_response_len = 2;
-        } else {
-            printk("Control Service: Set config command - insufficient data\n");
-            last_response[0] = CMD_SET_CONFIG;
-            last_response[1] = RESPONSE_ERROR_INVALID_DATA;
-            last_response_len = 2;
-        }
-        control_notify_response();
+        printk("Control Service: Set config (value: 0x%02x)\n", packet->param1);
+        memset(last_response.result, 0, sizeof(last_response.result));
         break;
         
     case CMD_GET_VERSION:
         printk("Control Service: Get version command\n");
-        last_response[0] = CMD_GET_VERSION;
-        last_response[1] = RESPONSE_SUCCESS;
-        last_response[2] = 1; // Major
-        last_response[3] = 0; // Minor
-        last_response[4] = 0; // Patch
-        last_response_len = 5;
-        control_notify_response();
+        last_response.result[0] = 1; // Major
+        last_response.result[1] = 0; // Minor
+        last_response.result[2] = 0; // Patch
+        memset(&last_response.result[3], 0, sizeof(last_response.result) - 3);
         break;
         
     default:
-        printk("Control Service: Unknown command: 0x%02x\n", data[0]);
-        last_response[0] = data[0];
-        last_response[1] = RESPONSE_ERROR_UNKNOWN_CMD;
-        last_response_len = 2;
-        control_notify_response();
+        printk("Control Service: Unknown command: 0x%02x\n", packet->cmd_id);
+        last_response.status = RESPONSE_ERROR_UNKNOWN_CMD;
+        memset(last_response.result, 0, sizeof(last_response.result));
         break;
     }
+
+    last_response_valid = true;
+    control_notify_response();
     
-    return len;
+    return sizeof(*packet);
 }
 
-static ssize_t control_response_read(struct bt_conn *conn,
-                                    const struct bt_gatt_attr *attr,
-                                    void *buf, uint16_t len, uint16_t offset)
+// The macro will generate control_response_read() wrapper that calls this
+static ssize_t simple_control_response_read(control_response_packet_t *response)
 {
     printk("Control Service: Response read request\n");
-    return bt_gatt_attr_read(conn, attr, buf, len, offset,
-                           last_response, last_response_len);
+    
+    if (last_response_valid) {
+        // Copy the typed response struct
+        *response = last_response;
+        return sizeof(*response);
+    }
+    
+    // Default empty response
+    memset(response, 0, sizeof(*response));
+    return sizeof(*response);
 }
 
-static ssize_t control_status_read(struct bt_conn *conn,
-                                  const struct bt_gatt_attr *attr,
-                                  void *buf, uint16_t len, uint16_t offset)
+// The macro will generate control_status_read() wrapper that calls this  
+static ssize_t simple_control_status_read(control_status_packet_t *status)
 {
-    uint8_t status_data[4] = {
-        device_status,
-        (uint8_t)(k_uptime_get() & 0xFF),
-        (uint8_t)((k_uptime_get() >> 8) & 0xFF),
-        (uint8_t)((k_uptime_get() >> 16) & 0xFF)
-    };
-    
     printk("Control Service: Status read request (status: %d)\n", device_status);
-    return bt_gatt_attr_read(conn, attr, buf, len, offset,
-                           status_data, sizeof(status_data));
+    
+    status->device_status = device_status;
+    status->uptime = k_uptime_get() / 1000;
+    memset(status->reserved, 0, sizeof(status->reserved));
+    
+    return sizeof(*status);
 }
+
+
 
 /* ============================================================================
  * SERVICE DEFINITION
@@ -137,19 +142,22 @@ static ssize_t control_status_read(struct bt_conn *conn,
 
 BT_GATT_SERVICE_DEFINE(control_service,
     BT_GATT_PRIMARY_SERVICE(CONTROL_SERVICE_UUID),
-    BT_GATT_CHARACTERISTIC(CONTROL_COMMAND_UUID,
+    BT_GATT_CHARACTERISTIC_SIMPLE(CONTROL_COMMAND_UUID,
                           BT_GATT_CHRC_WRITE,
                           BT_GATT_PERM_WRITE,
-                          NULL, control_command_write, NULL),
-    BT_GATT_CHARACTERISTIC(CONTROL_RESPONSE_UUID,
+                          NULL, control_command_write, NULL, 
+                          void, control_command_packet_t),
+    BT_GATT_CHARACTERISTIC_SIMPLE(CONTROL_RESPONSE_UUID,
                           BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY,
                           BT_GATT_PERM_READ,
-                          control_response_read, NULL, NULL),
+                          control_response_read, NULL, NULL, 
+                          control_response_packet_t, void),
     BT_GATT_CCC(NULL, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
-    BT_GATT_CHARACTERISTIC(CONTROL_STATUS_UUID,
+    BT_GATT_CHARACTERISTIC_SIMPLE(CONTROL_STATUS_UUID,
                           BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY,
                           BT_GATT_PERM_READ,
-                          control_status_read, NULL, NULL),
+                          control_status_read, NULL, NULL,
+                          control_status_packet_t, void),
     BT_GATT_CCC(NULL, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
 );
 
@@ -160,7 +168,8 @@ BT_GATT_SERVICE_DEFINE(control_service,
 int control_service_init(void)
 {
     device_status = DEVICE_STATUS_IDLE;
-    last_response_len = 0;
+    last_response_valid = false;
+    memset(&last_response, 0, sizeof(last_response));
     control_conn = NULL;
     
     printk("Control Service: Initialized\n");
@@ -206,21 +215,39 @@ int control_service_send_response(const uint8_t *response_data, uint16_t length)
         return -EINVAL;
     }
     
-    memcpy(last_response, response_data, length);
-    last_response_len = length;
+    // For backwards compatibility, copy raw data into response struct
+    if (length >= 2) {
+        last_response.cmd_id = response_data[0];
+        last_response.status = response_data[1];
+        
+        // Copy remaining data into result field
+        uint16_t result_len = length - 2;
+        if (result_len > sizeof(last_response.result)) {
+            result_len = sizeof(last_response.result);
+        }
+        memcpy(last_response.result, &response_data[2], result_len);
+        
+        // Clear remaining result bytes
+        if (result_len < sizeof(last_response.result)) {
+            memset(&last_response.result[result_len], 0, sizeof(last_response.result) - result_len);
+        }
+        
+        last_response_valid = true;
+        control_notify_response();
+        return 0;
+    }
     
-    control_notify_response();
-    return 0;
+    return -EINVAL;
 }
 
 int control_service_get_last_response(uint8_t *buffer, uint16_t max_length)
 {
-    if (!buffer || max_length == 0) {
+    if (!buffer || max_length == 0 || !last_response_valid) {
         return -EINVAL;
     }
     
-    uint16_t copy_len = (last_response_len < max_length) ? last_response_len : max_length;
-    memcpy(buffer, last_response, copy_len);
+    uint16_t copy_len = (sizeof(last_response) < max_length) ? sizeof(last_response) : max_length;
+    memcpy(buffer, &last_response, copy_len);
     
     return copy_len;
 }
