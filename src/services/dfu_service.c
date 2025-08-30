@@ -8,19 +8,6 @@
  */
 
 /* ============================================================================
- * PACKET TYPE DEFINITIONS
- * ============================================================================ */
-
-typedef struct {
-    uint8_t command;
-    uint8_t param[19];  // Command parameters (up to 19 bytes)
-} __attribute__((packed)) dfu_control_packet_t;
-
-typedef struct {
-    uint8_t data[20];   // Firmware data chunk
-} __attribute__((packed)) dfu_packet_t;
-
-/* ============================================================================
  * STATIC DATA
  * ============================================================================ */
 

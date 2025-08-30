@@ -9,29 +9,6 @@
  */
 
 /* ============================================================================
- * PACKET TYPE DEFINITIONS
- * ============================================================================ */
-
-typedef struct {
-    uint8_t cmd_id;
-    uint8_t param1;
-    uint8_t param2;
-    uint8_t reserved[17];
-} __attribute__((packed)) control_command_packet_t;
-
-typedef struct {
-    uint8_t cmd_id;
-    uint8_t status;
-    uint8_t result[6];
-} __attribute__((packed)) control_response_packet_t;
-
-typedef struct {
-    uint8_t device_status;
-    uint32_t uptime;
-    uint8_t reserved[3];
-} __attribute__((packed)) control_status_packet_t;
-
-/* ============================================================================
  * STATIC DATA
  * ============================================================================ */
 

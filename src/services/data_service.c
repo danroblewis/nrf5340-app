@@ -9,24 +9,6 @@
  */
 
 /* ============================================================================
- * PACKET TYPE DEFINITIONS
- * ============================================================================ */
-
-typedef struct {
-    uint8_t data[20];  // Maximum BLE packet data size
-} __attribute__((packed)) data_upload_packet_t;
-
-typedef struct {
-    uint8_t data[20];  // Download data chunk
-} __attribute__((packed)) data_download_packet_t;
-
-typedef struct {
-    uint8_t transfer_status;
-    uint16_t buffer_size;
-    uint8_t reserved[3];
-} __attribute__((packed)) data_transfer_status_packet_t;
-
-/* ============================================================================
  * STATIC DATA
  * ============================================================================ */
 

@@ -3,6 +3,7 @@
 
 #include <zephyr/bluetooth/gatt.h>
 #include <zephyr/bluetooth/conn.h>
+#include <stdint.h>
 
 /**
  * @file data_service.h
@@ -12,6 +13,42 @@
  * monitoring capabilities. Follows industry standard patterns for
  * BLE data transfer operations.
  */
+
+/* ============================================================================
+ * PACKET TYPE DEFINITIONS
+ * ============================================================================ */
+
+/**
+ * @brief Data upload packet structure
+ * 
+ * Used for uploading data chunks to the device.
+ * Total size: 20 bytes (maximum BLE packet size)
+ */
+typedef struct {
+    uint8_t data[20];  ///< Data payload (up to 20 bytes)
+} __attribute__((packed)) data_upload_packet_t;
+
+/**
+ * @brief Data download packet structure
+ * 
+ * Used for downloading data chunks from the device.
+ * Total size: 20 bytes
+ */
+typedef struct {
+    uint8_t data[20];  ///< Data payload (up to 20 bytes)
+} __attribute__((packed)) data_download_packet_t;
+
+/**
+ * @brief Data transfer status packet structure
+ * 
+ * Used for monitoring transfer progress and status.
+ * Total size: 6 bytes
+ */
+typedef struct {
+    uint8_t transfer_status;  ///< Transfer status (TRANSFER_STATUS_*)
+    uint16_t buffer_size;     ///< Current buffer size in bytes
+    uint8_t reserved[3];      ///< Reserved for future use
+} __attribute__((packed)) data_transfer_status_packet_t;
 
 /* ============================================================================
  * DATA SERVICE DEFINITIONS

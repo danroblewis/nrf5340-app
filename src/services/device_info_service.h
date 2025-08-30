@@ -2,6 +2,7 @@
 #define DEVICE_INFO_SERVICE_H
 
 #include <zephyr/bluetooth/gatt.h>
+#include <stdint.h>
 
 /**
  * @file device_info_service.h
@@ -9,6 +10,20 @@
  * 
  * Standard Bluetooth SIG service providing device identification information.
  */
+
+/* ============================================================================
+ * PACKET TYPE DEFINITIONS
+ * ============================================================================ */
+
+/**
+ * @brief Device information string packet structure
+ * 
+ * Used for all device information string responses.
+ * Total size: 64 bytes
+ */
+typedef struct {
+    char text[64];  ///< Null-terminated string (up to 63 chars + null)
+} __attribute__((packed)) device_info_string_t;
 
 /* ============================================================================
  * DEVICE INFORMATION CONSTANTS

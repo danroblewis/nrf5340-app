@@ -3,6 +3,7 @@
 
 #include <zephyr/bluetooth/gatt.h>
 #include <zephyr/bluetooth/conn.h>
+#include <stdint.h>
 
 /**
  * @file control_service.h
@@ -12,6 +13,47 @@
  * Follows industry standard BLE design with separate characteristics
  * for commands, responses, and status monitoring.
  */
+
+/* ============================================================================
+ * PACKET TYPE DEFINITIONS
+ * ============================================================================ */
+
+/**
+ * @brief Control command packet structure
+ * 
+ * Used for sending commands to the control service.
+ * Total size: 20 bytes
+ */
+typedef struct {
+    uint8_t cmd_id;      ///< Command identifier (CMD_*)
+    uint8_t param1;      ///< First parameter
+    uint8_t param2;      ///< Second parameter  
+    uint8_t reserved[17]; ///< Reserved for future use
+} __attribute__((packed)) control_command_packet_t;
+
+/**
+ * @brief Control response packet structure
+ * 
+ * Used for receiving responses from the control service.
+ * Total size: 8 bytes
+ */
+typedef struct {
+    uint8_t cmd_id;      ///< Original command identifier
+    uint8_t status;      ///< Response status (RESPONSE_*)
+    uint8_t result[6];   ///< Response data
+} __attribute__((packed)) control_response_packet_t;
+
+/**
+ * @brief Control status packet structure
+ * 
+ * Used for reading device status information.
+ * Total size: 8 bytes
+ */
+typedef struct {
+    uint8_t device_status; ///< Current device status (DEVICE_STATUS_*)
+    uint32_t uptime;       ///< Device uptime in seconds
+    uint8_t reserved[3];   ///< Reserved for future use
+} __attribute__((packed)) control_status_packet_t;
 
 /* ============================================================================
  * CONTROL SERVICE DEFINITIONS

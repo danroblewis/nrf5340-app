@@ -3,6 +3,7 @@
 
 #include <zephyr/bluetooth/gatt.h>
 #include <zephyr/bluetooth/conn.h>
+#include <stdint.h>
 
 /**
  * @file dfu_service.h
@@ -11,6 +12,31 @@
  * Mock implementation of Nordic's Device Firmware Update protocol.
  * Provides standard DFU interface for firmware updates over BLE.
  */
+
+/* ============================================================================
+ * PACKET TYPE DEFINITIONS
+ * ============================================================================ */
+
+/**
+ * @brief DFU control point packet structure
+ * 
+ * Used for sending DFU commands to the control point characteristic.
+ * Total size: 20 bytes
+ */
+typedef struct {
+    uint8_t command;      ///< DFU command opcode (DFU_CMD_*)
+    uint8_t param[19];    ///< Command parameters (up to 19 bytes)
+} __attribute__((packed)) dfu_control_packet_t;
+
+/**
+ * @brief DFU firmware data packet structure
+ * 
+ * Used for sending firmware data chunks to the packet characteristic.
+ * Total size: 20 bytes
+ */
+typedef struct {
+    uint8_t data[20];     ///< Firmware data chunk (up to 20 bytes)
+} __attribute__((packed)) dfu_packet_t;
 
 /* ============================================================================
  * DFU SERVICE DEFINITIONS
