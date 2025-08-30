@@ -36,6 +36,12 @@ void ble_services_connection_event(struct bt_conn *conn, bool connected);
  */
 uint8_t ble_services_get_device_status(void);
 
+/**
+ * @brief Get WASM service status
+ * @return WASM service status code
+ */
+uint8_t ble_services_get_wasm_status(void);
+
 /* ============================================================================
  * COMMON SERVICE UTILITIES
  * ============================================================================ */

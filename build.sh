@@ -13,7 +13,11 @@ export CCACHE_COMPRESSLEVEL=6
 export CCACHE_SLOPPINESS=file_macro,time_macros,include_file_mtime,include_file_ctime
 
 # Build from NCS directory with project source
-cd ~/ncs && \
+cd $ZEPHYR_BASE/../ && \
 west build -p always -b nrf5340dk_nrf5340_cpuapp -s /Users/danroblewis/projects/my5340-app && \
 echo "Build successful!" && \
-echo "To flash, run: cd ~/ncs && west flash"
+echo "To flash, run: cd $ZEPHYR_BASE/../ && west flash" && \
+echo "Build successful!"
+
+cd $ZEPHYR_BASE/../ && west flash && \
+echo "Flash successful!"

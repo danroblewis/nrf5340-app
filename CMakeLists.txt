@@ -20,6 +20,7 @@ target_sources(app PRIVATE
     src/services/dfu_service.c
     src/services/control_service.c
     src/services/data_service.c
+    src/services/wasm_service.c
 )
 
 # Include wasm3 headers and our services

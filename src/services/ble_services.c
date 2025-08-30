@@ -3,6 +3,7 @@
 #include "dfu_service.h"
 #include "control_service.h"
 #include "data_service.h"
+#include "wasm_service.h"
 #include <zephyr/sys/printk.h>
 
 /**
@@ -60,6 +61,13 @@ int ble_services_init(void)
         return err;
     }
     
+    /* Initialize WASM Service */
+    err = wasm_service_init();
+    if (err) {
+        printk("BLE Services: Failed to initialize WASM Service (err %d)\n", err);
+        return err;
+    }
+    
     services_initialized = true;
     
     printk("BLE Services: All services initialized successfully\n");
@@ -68,6 +76,7 @@ int ble_services_init(void)
     printk("  - Device Firmware Update Service (0xFE59)\n");
     printk("  - Custom Control Service\n");
     printk("  - Custom Data Service\n");
+    printk("  - Custom WASM Service\n");
     
     return 0;
 }
@@ -94,6 +103,7 @@ void ble_services_connection_event(struct bt_conn *conn, bool connected)
     dfu_service_connection_event(conn, connected);
     control_service_connection_event(conn, connected);
     data_service_connection_event(conn, connected);
+    wasm_service_connection_event(conn, connected);
 }
 
 uint8_t ble_services_get_device_status(void)
@@ -114,4 +124,13 @@ uint8_t ble_services_get_connection_count(void)
 bool ble_services_are_initialized(void)
 {
     return services_initialized;
+}
+
+uint8_t ble_services_get_wasm_status(void)
+{
+    if (!services_initialized) {
+        return 0; // Not initialized
+    }
+    
+    return wasm_service_get_status();
 }
