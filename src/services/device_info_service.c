@@ -63,33 +63,73 @@ static ssize_t simple_read_software_revision(device_info_string_t *response)
  * SERVICE DEFINITION
  * ============================================================================ */
 
+static ssize_t read_manufacturer_name(struct bt_conn *conn, const struct bt_gatt_attr *attr,
+                                      void *buf, uint16_t len, uint16_t offset)
+{
+    device_info_string_t response;
+    ssize_t result = simple_read_manufacturer_name(&response);
+    if (result < 0) return result;
+    return bt_gatt_attr_read(conn, attr, buf, len, offset, &response, result);
+}
+
+static ssize_t read_model_number(struct bt_conn *conn, const struct bt_gatt_attr *attr,
+                                 void *buf, uint16_t len, uint16_t offset)
+{
+    device_info_string_t response;
+    ssize_t result = simple_read_model_number(&response);
+    if (result < 0) return result;
+    return bt_gatt_attr_read(conn, attr, buf, len, offset, &response, result);
+}
+
+static ssize_t read_firmware_revision(struct bt_conn *conn, const struct bt_gatt_attr *attr,
+                                      void *buf, uint16_t len, uint16_t offset)
+{
+    device_info_string_t response;
+    ssize_t result = simple_read_firmware_revision(&response);
+    if (result < 0) return result;
+    return bt_gatt_attr_read(conn, attr, buf, len, offset, &response, result);
+}
+
+static ssize_t read_hardware_revision(struct bt_conn *conn, const struct bt_gatt_attr *attr,
+                                      void *buf, uint16_t len, uint16_t offset)
+{
+    device_info_string_t response;
+    ssize_t result = simple_read_hardware_revision(&response);
+    if (result < 0) return result;
+    return bt_gatt_attr_read(conn, attr, buf, len, offset, &response, result);
+}
+
+static ssize_t read_software_revision(struct bt_conn *conn, const struct bt_gatt_attr *attr,
+                                      void *buf, uint16_t len, uint16_t offset)
+{
+    device_info_string_t response;
+    ssize_t result = simple_read_software_revision(&response);
+    if (result < 0) return result;
+    return bt_gatt_attr_read(conn, attr, buf, len, offset, &response, result);
+}
+
 BT_GATT_SERVICE_DEFINE(device_info_service,
     BT_GATT_PRIMARY_SERVICE(BT_UUID_DIS),
-    BT_GATT_CHARACTERISTIC_SIMPLE(BT_UUID_DIS_MANUFACTURER_NAME,
+    BT_GATT_CHARACTERISTIC(BT_UUID_DIS_MANUFACTURER_NAME,
                           BT_GATT_CHRC_READ,
                           BT_GATT_PERM_READ,
-                          read_manufacturer_name, NULL, NULL,
-                          device_info_string_t, void),
-    BT_GATT_CHARACTERISTIC_SIMPLE(BT_UUID_DIS_MODEL_NUMBER,
+                          read_manufacturer_name, NULL, NULL),
+    BT_GATT_CHARACTERISTIC(BT_UUID_DIS_MODEL_NUMBER,
                           BT_GATT_CHRC_READ,
                           BT_GATT_PERM_READ,
-                          read_model_number, NULL, NULL,
-                          device_info_string_t, void),
-    BT_GATT_CHARACTERISTIC_SIMPLE(BT_UUID_DIS_FIRMWARE_REVISION,
+                          read_model_number, NULL, NULL),
+    BT_GATT_CHARACTERISTIC(BT_UUID_DIS_FIRMWARE_REVISION,
                           BT_GATT_CHRC_READ,
                           BT_GATT_PERM_READ,
-                          read_firmware_revision, NULL, NULL,
-                          device_info_string_t, void),
-    BT_GATT_CHARACTERISTIC_SIMPLE(BT_UUID_DIS_HARDWARE_REVISION,
+                          read_firmware_revision, NULL, NULL),
+    BT_GATT_CHARACTERISTIC(BT_UUID_DIS_HARDWARE_REVISION,
                           BT_GATT_CHRC_READ,
                           BT_GATT_PERM_READ,
-                          read_hardware_revision, NULL, NULL,
-                          device_info_string_t, void),
-    BT_GATT_CHARACTERISTIC_SIMPLE(BT_UUID_DIS_SOFTWARE_REVISION,
+                          read_hardware_revision, NULL, NULL),
+    BT_GATT_CHARACTERISTIC(BT_UUID_DIS_SOFTWARE_REVISION,
                           BT_GATT_CHRC_READ,
                           BT_GATT_PERM_READ,
-                          read_software_revision, NULL, NULL,
-                          device_info_string_t, void),
+                          read_software_revision, NULL, NULL),
 );
 
 /* ============================================================================

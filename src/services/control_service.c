@@ -114,27 +114,59 @@ static ssize_t simple_control_status_read(control_status_packet_t *status)
 
 
 /* ============================================================================
+ * BLE CHARACTERISTIC HANDLERS
+ * ============================================================================ */
+
+static ssize_t control_command_write(struct bt_conn *conn, const struct bt_gatt_attr *attr,
+                                    const void *buf, uint16_t len, uint16_t offset, uint8_t flags)
+{
+    if (len < sizeof(control_command_packet_t)) {
+        printk("Control Service: Command packet too small\n");
+        return BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN);
+    }
+    
+    return simple_control_command_write((const control_command_packet_t *)buf);
+}
+
+static ssize_t control_response_read(struct bt_conn *conn, const struct bt_gatt_attr *attr,
+                                   void *buf, uint16_t len, uint16_t offset)
+{
+    control_response_packet_t response;
+    ssize_t result = simple_control_response_read(&response);
+    if (result < 0) return result;
+    
+    return bt_gatt_attr_read(conn, attr, buf, len, offset, &response, result);
+}
+
+static ssize_t control_status_read(struct bt_conn *conn, const struct bt_gatt_attr *attr,
+                                 void *buf, uint16_t len, uint16_t offset)
+{
+    control_status_packet_t status;
+    ssize_t result = simple_control_status_read(&status);
+    if (result < 0) return result;
+    
+    return bt_gatt_attr_read(conn, attr, buf, len, offset, &status, result);
+}
+
+/* ============================================================================
  * SERVICE DEFINITION
  * ============================================================================ */
 
 BT_GATT_SERVICE_DEFINE(control_service,
     BT_GATT_PRIMARY_SERVICE(CONTROL_SERVICE_UUID),
-    BT_GATT_CHARACTERISTIC_SIMPLE(CONTROL_COMMAND_UUID,
+    BT_GATT_CHARACTERISTIC(CONTROL_COMMAND_UUID,
                           BT_GATT_CHRC_WRITE,
                           BT_GATT_PERM_WRITE,
-                          NULL, control_command_write, NULL, 
-                          void, control_command_packet_t),
-    BT_GATT_CHARACTERISTIC_SIMPLE(CONTROL_RESPONSE_UUID,
+                          NULL, control_command_write, NULL),
+    BT_GATT_CHARACTERISTIC(CONTROL_RESPONSE_UUID,
                           BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY,
                           BT_GATT_PERM_READ,
-                          control_response_read, NULL, NULL, 
-                          control_response_packet_t, void),
+                          control_response_read, NULL, NULL),
     BT_GATT_CCC(NULL, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
-    BT_GATT_CHARACTERISTIC_SIMPLE(CONTROL_STATUS_UUID,
+    BT_GATT_CHARACTERISTIC(CONTROL_STATUS_UUID,
                           BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY,
                           BT_GATT_PERM_READ,
-                          control_status_read, NULL, NULL,
-                          control_status_packet_t, void),
+                          control_status_read, NULL, NULL),
     BT_GATT_CCC(NULL, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
 );
 

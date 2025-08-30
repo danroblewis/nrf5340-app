@@ -115,19 +115,35 @@ static ssize_t simple_dfu_packet_write(const dfu_packet_t *packet)
  * SERVICE DEFINITION
  * ============================================================================ */
 
+static ssize_t dfu_control_point_write(struct bt_conn *conn, const struct bt_gatt_attr *attr,
+                                      const void *buf, uint16_t len, uint16_t offset, uint8_t flags)
+{
+    if (len < sizeof(dfu_control_packet_t)) {
+        return BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN);
+    }
+    return simple_dfu_control_point_write((const dfu_control_packet_t *)buf);
+}
+
+static ssize_t dfu_packet_write(struct bt_conn *conn, const struct bt_gatt_attr *attr,
+                               const void *buf, uint16_t len, uint16_t offset, uint8_t flags)
+{
+    if (len < sizeof(dfu_packet_t)) {
+        return BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN);
+    }
+    return simple_dfu_packet_write((const dfu_packet_t *)buf);
+}
+
 BT_GATT_SERVICE_DEFINE(dfu_service,
     BT_GATT_PRIMARY_SERVICE(DFU_SERVICE_UUID),
-    BT_GATT_CHARACTERISTIC_SIMPLE(DFU_CONTROL_POINT_UUID,
+    BT_GATT_CHARACTERISTIC(DFU_CONTROL_POINT_UUID,
                           BT_GATT_CHRC_WRITE | BT_GATT_CHRC_INDICATE,
                           BT_GATT_PERM_WRITE,
-                          NULL, dfu_control_point_write, NULL,
-                          void, dfu_control_packet_t),
+                          NULL, dfu_control_point_write, NULL),
     BT_GATT_CCC(NULL, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
-    BT_GATT_CHARACTERISTIC_SIMPLE(DFU_PACKET_UUID,
+    BT_GATT_CHARACTERISTIC(DFU_PACKET_UUID,
                           BT_GATT_CHRC_WRITE_WITHOUT_RESP,
                           BT_GATT_PERM_WRITE,
-                          NULL, dfu_packet_write, NULL,
-                          void, dfu_packet_t),
+                          NULL, dfu_packet_write, NULL),
 );
 
 /* ============================================================================

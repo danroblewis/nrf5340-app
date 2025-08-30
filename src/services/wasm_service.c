@@ -1,5 +1,4 @@
 #include "wasm_service.h"
-#include "ble_packet_handlers.h"
 #include "../wasm3_wrapper.h"
 #include <zephyr/sys/printk.h>
 #include <zephyr/sys/crc.h>
@@ -143,14 +142,22 @@ static void reset_upload_state(void)
 }
 
 /* ============================================================================
- * SIMPLIFIED CHARACTERISTIC HANDLERS
+ * BLE CHARACTERISTIC HANDLERS
  * ============================================================================ */
 
 /**
  * @brief Handle WASM upload packets
  */
-static ssize_t simple_wasm_upload_write(const wasm_upload_packet_t *packet)
+static ssize_t wasm_upload_write(struct bt_conn *conn, const struct bt_gatt_attr *attr,
+                                const void *buf, uint16_t len, uint16_t offset, uint8_t flags)
 {
+    if (len < sizeof(wasm_upload_packet_t)) {
+        printk("WASM Service: Upload packet too small (%d < %zu)\n", len, sizeof(wasm_upload_packet_t));
+        return BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN);
+    }
+    
+    const wasm_upload_packet_t *packet = (const wasm_upload_packet_t *)buf;
+    
     printk("WASM Service: Upload packet received (cmd: 0x%02x, seq: %d, size: %d)\n",
            packet->cmd, packet->sequence, packet->chunk_size);
     
@@ -163,7 +170,7 @@ static ssize_t simple_wasm_upload_write(const wasm_upload_packet_t *packet)
                    packet->total_size, WASM_CODE_BUFFER_SIZE);
             wasm_error_code = WASM_ERROR_BUFFER_OVERFLOW;
             wasm_status = WASM_STATUS_ERROR;
-            return -1;
+            return BT_GATT_ERR(BT_ATT_ERR_INSUFFICIENT_RESOURCES);
         }
         
         reset_upload_state();
@@ -178,7 +185,7 @@ static ssize_t simple_wasm_upload_write(const wasm_upload_packet_t *packet)
         if (wasm_status != WASM_STATUS_RECEIVING) {
             printk("WASM Service: Not in receiving state\n");
             wasm_error_code = WASM_ERROR_INVALID_PARAMS;
-            return -1;
+            return BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN);
         }
         
         /* Verify sequence number */
@@ -187,7 +194,7 @@ static ssize_t simple_wasm_upload_write(const wasm_upload_packet_t *packet)
                    wasm_upload_sequence, packet->sequence);
             wasm_error_code = WASM_ERROR_INVALID_PARAMS;
             wasm_status = WASM_STATUS_ERROR;
-            return -1;
+            return BT_GATT_ERR(BT_ATT_ERR_INVALID_OFFSET);
         }
         
         /* Check buffer overflow */
@@ -196,7 +203,7 @@ static ssize_t simple_wasm_upload_write(const wasm_upload_packet_t *packet)
             printk("WASM Service: Buffer overflow during upload\n");
             wasm_error_code = WASM_ERROR_BUFFER_OVERFLOW;
             wasm_status = WASM_STATUS_ERROR;
-            return -1;
+            return BT_GATT_ERR(BT_ATT_ERR_INSUFFICIENT_RESOURCES);
         }
         
         /* Copy chunk data */
@@ -244,17 +251,25 @@ static ssize_t simple_wasm_upload_write(const wasm_upload_packet_t *packet)
     default:
         printk("WASM Service: Unknown upload command: 0x%02x\n", packet->cmd);
         wasm_error_code = WASM_ERROR_INVALID_PARAMS;
-        return -1;
+        return BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN);
     }
     
-    return sizeof(*packet);
+    return len;
 }
 
 /**
  * @brief Handle WASM execution requests
  */
-static ssize_t simple_wasm_execute_write(const wasm_execute_packet_t *packet)
+static ssize_t wasm_execute_write(struct bt_conn *conn, const struct bt_gatt_attr *attr,
+                                 const void *buf, uint16_t len, uint16_t offset, uint8_t flags)
 {
+    if (len < sizeof(wasm_execute_packet_t)) {
+        printk("WASM Service: Execute packet too small (%d < %zu)\n", len, sizeof(wasm_execute_packet_t));
+        return BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN);
+    }
+    
+    const wasm_execute_packet_t *packet = (const wasm_execute_packet_t *)buf;
+    
     printk("WASM Service: Execute request for function '%s' with %u args\n",
            packet->function_name, packet->arg_count);
     
@@ -268,7 +283,7 @@ static ssize_t simple_wasm_execute_write(const wasm_execute_packet_t *packet)
         last_result.status = WASM_STATUS_ERROR;
         last_result.error_code = WASM_ERROR_LOAD_FAILED;
         last_result_valid = true;
-        return sizeof(*packet);
+        return len;
     }
     
     /* Validate function name */
@@ -277,7 +292,7 @@ static ssize_t simple_wasm_execute_write(const wasm_execute_packet_t *packet)
         last_result.status = WASM_STATUS_ERROR;
         last_result.error_code = WASM_ERROR_INVALID_PARAMS;
         last_result_valid = true;
-        return sizeof(*packet);
+        return len;
     }
     
     /* Update status */
@@ -322,45 +337,51 @@ static ssize_t simple_wasm_execute_write(const wasm_execute_packet_t *packet)
     }
     
     last_result_valid = true;
-    return sizeof(*packet);
+    return len;
 }
 
 /**
  * @brief Handle WASM status read requests
  */
-static ssize_t simple_wasm_status_read(wasm_status_packet_t *status)
+static ssize_t wasm_status_read(struct bt_conn *conn, const struct bt_gatt_attr *attr,
+                               void *buf, uint16_t len, uint16_t offset)
 {
+    wasm_status_packet_t status_packet;
+    
     printk("WASM Service: Status read (status: %d, received: %u/%u bytes)\n",
            wasm_status, wasm_bytes_received, wasm_total_expected);
     
-    status->status = wasm_status;
-    status->error_code = wasm_error_code;
-    status->bytes_received = wasm_bytes_received;
-    status->total_size = wasm_total_expected;
-    status->uptime = k_uptime_get() / 1000;
-    memset(status->reserved, 0, sizeof(status->reserved));
+    status_packet.status = wasm_status;
+    status_packet.error_code = wasm_error_code;
+    status_packet.bytes_received = wasm_bytes_received;
+    status_packet.total_size = wasm_total_expected;
+    status_packet.uptime = k_uptime_get() / 1000;
+    memset(status_packet.reserved, 0, sizeof(status_packet.reserved));
     
-    return sizeof(*status);
+    return bt_gatt_attr_read(conn, attr, buf, len, offset, &status_packet, sizeof(status_packet));
 }
 
 /**
  * @brief Handle WASM result read requests
  */
-static ssize_t simple_wasm_result_read(wasm_result_packet_t *result)
+static ssize_t wasm_result_read(struct bt_conn *conn, const struct bt_gatt_attr *attr,
+                               void *buf, uint16_t len, uint16_t offset)
 {
+    wasm_result_packet_t result_packet;
+    
     printk("WASM Service: Result read request\n");
     
     if (last_result_valid) {
-        *result = last_result;
+        result_packet = last_result;
         printk("WASM Service: Returning result (status: %d, value: %d)\n",
-               result->status, result->return_value);
+               result_packet.status, result_packet.return_value);
     } else {
-        memset(result, 0, sizeof(*result));
-        result->status = WASM_STATUS_IDLE;
-        result->error_code = WASM_ERROR_NONE;
+        memset(&result_packet, 0, sizeof(result_packet));
+        result_packet.status = WASM_STATUS_IDLE;
+        result_packet.error_code = WASM_ERROR_NONE;
     }
     
-    return sizeof(*result);
+    return bt_gatt_attr_read(conn, attr, buf, len, offset, &result_packet, sizeof(result_packet));
 }
 
 /* ============================================================================
@@ -371,33 +392,29 @@ BT_GATT_SERVICE_DEFINE(wasm_service,
     BT_GATT_PRIMARY_SERVICE(WASM_SERVICE_UUID),
     
     /* WASM Upload Characteristic - Write for uploading WASM bytecode */
-    BT_GATT_CHARACTERISTIC_SIMPLE(WASM_UPLOAD_UUID,
+    BT_GATT_CHARACTERISTIC(WASM_UPLOAD_UUID,
                           BT_GATT_CHRC_WRITE | BT_GATT_CHRC_WRITE_WITHOUT_RESP,
                           BT_GATT_PERM_WRITE,
-                          NULL, wasm_upload_write, NULL,
-                          void, wasm_upload_packet_t),
+                          NULL, wasm_upload_write, NULL),
     
     /* WASM Execute Characteristic - Write for executing functions */
-    BT_GATT_CHARACTERISTIC_SIMPLE(WASM_EXECUTE_UUID,
+    BT_GATT_CHARACTERISTIC(WASM_EXECUTE_UUID,
                           BT_GATT_CHRC_WRITE,
                           BT_GATT_PERM_WRITE,
-                          NULL, wasm_execute_write, NULL,
-                          void, wasm_execute_packet_t),
+                          NULL, wasm_execute_write, NULL),
     
     /* WASM Status Characteristic - Read/Notify for status updates */
-    BT_GATT_CHARACTERISTIC_SIMPLE(WASM_STATUS_UUID,
+    BT_GATT_CHARACTERISTIC(WASM_STATUS_UUID,
                           BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY,
                           BT_GATT_PERM_READ,
-                          wasm_status_read, NULL, NULL,
-                          wasm_status_packet_t, void),
+                          wasm_status_read, NULL, NULL),
     BT_GATT_CCC(NULL, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
     
     /* WASM Result Characteristic - Read/Notify for execution results */
-    BT_GATT_CHARACTERISTIC_SIMPLE(WASM_RESULT_UUID,
+    BT_GATT_CHARACTERISTIC(WASM_RESULT_UUID,
                           BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY,
                           BT_GATT_PERM_READ,
-                          wasm_result_read, NULL, NULL,
-                          wasm_result_packet_t, void),
+                          wasm_result_read, NULL, NULL),
     BT_GATT_CCC(NULL, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
 );
 

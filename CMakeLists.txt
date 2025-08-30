@@ -20,7 +20,7 @@ target_sources(app PRIVATE
     src/services/dfu_service.c
     src/services/control_service.c
     src/services/data_service.c
-    src/services/wasm_service.c
+    # src/services/wasm_service.c  # Temporarily disabled due to BLE macro issues
 )
 
 # Include wasm3 headers and our services

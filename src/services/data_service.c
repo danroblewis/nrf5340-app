@@ -101,24 +101,48 @@ static ssize_t simple_data_transfer_status_read(data_transfer_status_packet_t *s
  * SERVICE DEFINITION
  * ============================================================================ */
 
+static ssize_t data_upload_write(struct bt_conn *conn, const struct bt_gatt_attr *attr,
+                                const void *buf, uint16_t len, uint16_t offset, uint8_t flags)
+{
+    if (len < sizeof(data_upload_packet_t)) {
+        return BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN);
+    }
+    return simple_data_upload_write((const data_upload_packet_t *)buf);
+}
+
+static ssize_t data_download_read(struct bt_conn *conn, const struct bt_gatt_attr *attr,
+                                 void *buf, uint16_t len, uint16_t offset)
+{
+    data_download_packet_t response;
+    ssize_t result = simple_data_download_read(&response);
+    if (result < 0) return result;
+    return bt_gatt_attr_read(conn, attr, buf, len, offset, &response, result);
+}
+
+static ssize_t data_transfer_status_read(struct bt_conn *conn, const struct bt_gatt_attr *attr,
+                                        void *buf, uint16_t len, uint16_t offset)
+{
+    data_transfer_status_packet_t status;
+    ssize_t result = simple_data_transfer_status_read(&status);
+    if (result < 0) return result;
+    return bt_gatt_attr_read(conn, attr, buf, len, offset, &status, result);
+}
+
 BT_GATT_SERVICE_DEFINE(data_service,
     BT_GATT_PRIMARY_SERVICE(DATA_SERVICE_UUID),
-    BT_GATT_CHARACTERISTIC_SIMPLE(DATA_UPLOAD_UUID,
+    BT_GATT_CHARACTERISTIC(DATA_UPLOAD_UUID,
                           BT_GATT_CHRC_WRITE | BT_GATT_CHRC_WRITE_WITHOUT_RESP,
                           BT_GATT_PERM_WRITE,
-                          NULL, data_upload_write, NULL,
-                          void, data_upload_packet_t),
-    BT_GATT_CHARACTERISTIC_SIMPLE(DATA_DOWNLOAD_UUID,
+                          NULL, data_upload_write, NULL),
+    BT_GATT_CHARACTERISTIC(DATA_DOWNLOAD_UUID,
                           BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY,
                           BT_GATT_PERM_READ,
-                          data_download_read, NULL, NULL,
-                          data_download_packet_t, void),
+                          data_download_read, NULL, NULL),
     BT_GATT_CCC(NULL, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
-    BT_GATT_CHARACTERISTIC_SIMPLE(DATA_TRANSFER_STATUS_UUID,
+    BT_GATT_CHARACTERISTIC(DATA_TRANSFER_STATUS_UUID,
                           BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY,
                           BT_GATT_PERM_READ,
-                          data_transfer_status_read, NULL, NULL,
-                          data_transfer_status_packet_t, void),
+                          data_transfer_status_read, NULL, NULL),
     BT_GATT_CCC(NULL, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
 );
 

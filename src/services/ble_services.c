@@ -3,7 +3,7 @@
 #include "dfu_service.h"
 #include "control_service.h"
 #include "data_service.h"
-#include "wasm_service.h"
+/* #include "wasm_service.h" // Temporarily disabled */
 #include <zephyr/sys/printk.h>
 
 /**
@@ -62,11 +62,13 @@ int ble_services_init(void)
     }
     
     /* Initialize WASM Service */
+    /* Temporarily disabled due to BLE macro issues
     err = wasm_service_init();
     if (err) {
         printk("BLE Services: Failed to initialize WASM Service (err %d)\n", err);
         return err;
     }
+    */
     
     services_initialized = true;
     
@@ -103,7 +105,7 @@ void ble_services_connection_event(struct bt_conn *conn, bool connected)
     dfu_service_connection_event(conn, connected);
     control_service_connection_event(conn, connected);
     data_service_connection_event(conn, connected);
-    wasm_service_connection_event(conn, connected);
+    /* wasm_service_connection_event(conn, connected); // Temporarily disabled */
 }
 
 uint8_t ble_services_get_device_status(void)
@@ -132,5 +134,8 @@ uint8_t ble_services_get_wasm_status(void)
         return 0; // Not initialized
     }
     
+    /* Temporarily disabled
     return wasm_service_get_status();
+    */
+    return 0; // Service disabled
 }
