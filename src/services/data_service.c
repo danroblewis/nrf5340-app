@@ -26,7 +26,11 @@ static uint16_t download_data_length = 0;
  * ============================================================================ */
 
 // The macro will generate data_upload_write() wrapper that calls this
-static ssize_t simple_data_upload_write(const data_upload_packet_t *packet)
+/**
+ * @brief Handle data upload requests - CLEAN VERSION!
+ * This function takes your struct directly, no BLE boilerplate needed.
+ */
+static ssize_t data_upload_handler(const data_upload_packet_t *packet)
 {
     printk("Data Service: Upload received %zu bytes\n", sizeof(*packet));
     
@@ -62,7 +66,11 @@ static ssize_t simple_data_upload_write(const data_upload_packet_t *packet)
 }
 
 // The macro will generate data_download_read() wrapper that calls this
-static ssize_t simple_data_download_read(data_download_packet_t *response)
+/**
+ * @brief Get data download - CLEAN VERSION!
+ * This function fills your struct directly, no BLE boilerplate needed.
+ */
+static ssize_t data_download_handler(data_download_packet_t *response)
 {
     printk("Data Service: Download request\n");
     
@@ -85,7 +93,11 @@ static ssize_t simple_data_download_read(data_download_packet_t *response)
 }
 
 // The macro will generate data_transfer_status_read() wrapper that calls this  
-static ssize_t simple_data_transfer_status_read(data_transfer_status_packet_t *status)
+/**
+ * @brief Get data transfer status - CLEAN VERSION!
+ * This function fills your struct directly, no BLE boilerplate needed.
+ */
+static ssize_t data_transfer_status_handler(data_transfer_status_packet_t *status)
 {
     printk("Data Service: Transfer status read (status: %d, size: %d)\n", 
            transfer_status, data_buffer_size);
@@ -101,48 +113,35 @@ static ssize_t simple_data_transfer_status_read(data_transfer_status_packet_t *s
  * SERVICE DEFINITION
  * ============================================================================ */
 
-static ssize_t data_upload_write(struct bt_conn *conn, const struct bt_gatt_attr *attr,
-                                const void *buf, uint16_t len, uint16_t offset, uint8_t flags)
-{
-    if (len < sizeof(data_upload_packet_t)) {
-        return BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN);
-    }
-    return simple_data_upload_write((const data_upload_packet_t *)buf);
-}
+/* ============================================================================
+ * CLEAN HANDLERS - WORK WITH STRUCTS DIRECTLY
+ * ============================================================================ */
 
-static ssize_t data_download_read(struct bt_conn *conn, const struct bt_gatt_attr *attr,
-                                 void *buf, uint16_t len, uint16_t offset)
-{
-    data_download_packet_t response;
-    ssize_t result = simple_data_download_read(&response);
-    if (result < 0) return result;
-    return bt_gatt_attr_read(conn, attr, buf, len, offset, &response, result);
-}
+/* Declare the clean handlers we want to write */
+DECLARE_WRITE_HANDLER(data_upload_handler, data_upload_packet_t);
+DECLARE_READ_HANDLER(data_download_handler, data_download_packet_t);
+DECLARE_READ_HANDLER(data_transfer_status_handler, data_transfer_status_packet_t);
 
-static ssize_t data_transfer_status_read(struct bt_conn *conn, const struct bt_gatt_attr *attr,
-                                        void *buf, uint16_t len, uint16_t offset)
-{
-    data_transfer_status_packet_t status;
-    ssize_t result = simple_data_transfer_status_read(&status);
-    if (result < 0) return result;
-    return bt_gatt_attr_read(conn, attr, buf, len, offset, &status, result);
-}
+/* Generate BLE wrappers automatically */
+BLE_WRITE_WRAPPER(data_upload_handler, data_upload_packet_t)
+BLE_READ_WRAPPER(data_download_handler, data_download_packet_t)
+BLE_READ_WRAPPER(data_transfer_status_handler, data_transfer_status_packet_t)
 
 BT_GATT_SERVICE_DEFINE(data_service,
     BT_GATT_PRIMARY_SERVICE(DATA_SERVICE_UUID),
     BT_GATT_CHARACTERISTIC(DATA_UPLOAD_UUID,
                           BT_GATT_CHRC_WRITE | BT_GATT_CHRC_WRITE_WITHOUT_RESP,
                           BT_GATT_PERM_WRITE,
-                          NULL, data_upload_write, NULL),
+                          NULL, data_upload_handler_ble, NULL),
     BT_GATT_CHARACTERISTIC(DATA_DOWNLOAD_UUID,
                           BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY,
                           BT_GATT_PERM_READ,
-                          data_download_read, NULL, NULL),
+                          data_download_handler_ble, NULL, NULL),
     BT_GATT_CCC(NULL, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
     BT_GATT_CHARACTERISTIC(DATA_TRANSFER_STATUS_UUID,
                           BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY,
                           BT_GATT_PERM_READ,
-                          data_transfer_status_read, NULL, NULL),
+                          data_transfer_status_handler_ble, NULL, NULL),
     BT_GATT_CCC(NULL, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
 );
 

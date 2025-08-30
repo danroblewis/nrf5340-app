@@ -61,6 +61,42 @@
  * SIMPLIFIED HANDLERS - NO BLE BOILERPLATE
  * ============================================================================ */
 
-/* For now, let's disable the complex macros and use standard BLE approach */
+/**
+ * @brief Macros to generate clean wrapper functions
+ * 
+ * These generate the BLE boilerplate so you can write simple functions
+ * that take your struct types directly.
+ */
+
+/* Generate a BLE write wrapper for a clean handler function */
+#define BLE_WRITE_WRAPPER(handler_name, struct_type) \
+    static ssize_t handler_name##_ble(struct bt_conn *conn, const struct bt_gatt_attr *attr, \
+                                      const void *buf, uint16_t len, uint16_t offset, uint8_t flags) \
+    { \
+        if (len < sizeof(struct_type)) { \
+            printk(#handler_name ": Packet too small (%d < %zu)\n", len, sizeof(struct_type)); \
+            return BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN); \
+        } \
+        const struct_type *packet = (const struct_type *)buf; \
+        return handler_name(packet); \
+    }
+
+/* Generate a BLE read wrapper for a clean handler function */
+#define BLE_READ_WRAPPER(handler_name, struct_type) \
+    static ssize_t handler_name##_ble(struct bt_conn *conn, const struct bt_gatt_attr *attr, \
+                                      void *buf, uint16_t len, uint16_t offset) \
+    { \
+        struct_type response; \
+        ssize_t result = handler_name(&response); \
+        if (result < 0) return result; \
+        return bt_gatt_attr_read(conn, attr, buf, len, offset, &response, sizeof(response)); \
+    }
+
+/* Declare clean handler function signatures */
+#define DECLARE_WRITE_HANDLER(handler_name, struct_type) \
+    static ssize_t handler_name(const struct_type *packet)
+
+#define DECLARE_READ_HANDLER(handler_name, struct_type) \
+    static ssize_t handler_name(struct_type *response)
 
 #endif /* BLE_PACKET_HANDLERS_H */

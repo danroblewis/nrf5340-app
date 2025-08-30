@@ -37,7 +37,11 @@ static void control_notify_response(void)
  * ============================================================================ */
 
 // The macro will generate control_command_write() wrapper that calls this
-static ssize_t simple_control_command_write(const control_command_packet_t *packet)
+/**
+ * @brief Handle control command requests - CLEAN VERSION!
+ * This function takes your struct directly, no BLE boilerplate needed.
+ */
+static ssize_t control_command_handler(const control_command_packet_t *packet)
 {
     printk("Control Service: Command received: 0x%02x\n", packet->cmd_id);
     
@@ -84,7 +88,11 @@ static ssize_t simple_control_command_write(const control_command_packet_t *pack
 }
 
 // The macro will generate control_response_read() wrapper that calls this
-static ssize_t simple_control_response_read(control_response_packet_t *response)
+/**
+ * @brief Get control response - CLEAN VERSION!
+ * This function fills your struct directly, no BLE boilerplate needed.
+ */
+static ssize_t control_response_handler(control_response_packet_t *response)
 {
     printk("Control Service: Response read request\n");
     
@@ -100,7 +108,11 @@ static ssize_t simple_control_response_read(control_response_packet_t *response)
 }
 
 // The macro will generate control_status_read() wrapper that calls this  
-static ssize_t simple_control_status_read(control_status_packet_t *status)
+/**
+ * @brief Get control status - CLEAN VERSION!
+ * This function fills your struct directly, no BLE boilerplate needed.
+ */
+static ssize_t control_status_handler(control_status_packet_t *status)
 {
     printk("Control Service: Status read request (status: %d)\n", device_status);
     
@@ -117,36 +129,19 @@ static ssize_t simple_control_status_read(control_status_packet_t *status)
  * BLE CHARACTERISTIC HANDLERS
  * ============================================================================ */
 
-static ssize_t control_command_write(struct bt_conn *conn, const struct bt_gatt_attr *attr,
-                                    const void *buf, uint16_t len, uint16_t offset, uint8_t flags)
-{
-    if (len < sizeof(control_command_packet_t)) {
-        printk("Control Service: Command packet too small\n");
-        return BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN);
-    }
-    
-    return simple_control_command_write((const control_command_packet_t *)buf);
-}
+/* ============================================================================
+ * CLEAN HANDLERS - WORK WITH STRUCTS DIRECTLY
+ * ============================================================================ */
 
-static ssize_t control_response_read(struct bt_conn *conn, const struct bt_gatt_attr *attr,
-                                   void *buf, uint16_t len, uint16_t offset)
-{
-    control_response_packet_t response;
-    ssize_t result = simple_control_response_read(&response);
-    if (result < 0) return result;
-    
-    return bt_gatt_attr_read(conn, attr, buf, len, offset, &response, result);
-}
+/* Declare the clean handlers we want to write */
+DECLARE_WRITE_HANDLER(control_command_handler, control_command_packet_t);
+DECLARE_READ_HANDLER(control_response_handler, control_response_packet_t);
+DECLARE_READ_HANDLER(control_status_handler, control_status_packet_t);
 
-static ssize_t control_status_read(struct bt_conn *conn, const struct bt_gatt_attr *attr,
-                                 void *buf, uint16_t len, uint16_t offset)
-{
-    control_status_packet_t status;
-    ssize_t result = simple_control_status_read(&status);
-    if (result < 0) return result;
-    
-    return bt_gatt_attr_read(conn, attr, buf, len, offset, &status, result);
-}
+/* Generate BLE wrappers automatically */
+BLE_WRITE_WRAPPER(control_command_handler, control_command_packet_t)
+BLE_READ_WRAPPER(control_response_handler, control_response_packet_t)  
+BLE_READ_WRAPPER(control_status_handler, control_status_packet_t)
 
 /* ============================================================================
  * SERVICE DEFINITION
@@ -157,16 +152,16 @@ BT_GATT_SERVICE_DEFINE(control_service,
     BT_GATT_CHARACTERISTIC(CONTROL_COMMAND_UUID,
                           BT_GATT_CHRC_WRITE,
                           BT_GATT_PERM_WRITE,
-                          NULL, control_command_write, NULL),
+                          NULL, control_command_handler_ble, NULL),
     BT_GATT_CHARACTERISTIC(CONTROL_RESPONSE_UUID,
                           BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY,
                           BT_GATT_PERM_READ,
-                          control_response_read, NULL, NULL),
+                          control_response_handler_ble, NULL, NULL),
     BT_GATT_CCC(NULL, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
     BT_GATT_CHARACTERISTIC(CONTROL_STATUS_UUID,
                           BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY,
                           BT_GATT_PERM_READ,
-                          control_status_read, NULL, NULL),
+                          control_status_handler_ble, NULL, NULL),
     BT_GATT_CCC(NULL, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
 );
 

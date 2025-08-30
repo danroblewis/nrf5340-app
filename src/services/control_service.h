@@ -59,10 +59,11 @@ typedef struct {
  * CONTROL SERVICE DEFINITIONS
  * ============================================================================ */
 
-#define CONTROL_SERVICE_UUID        BT_UUID_128(BT_UUID_128_ENCODE(0x12345678, 0x1234, 0x5678, 0x1234, 0x123456789ABC))
-#define CONTROL_COMMAND_UUID        BT_UUID_128(BT_UUID_128_ENCODE(0x12345678, 0x1234, 0x5678, 0x1234, 0x123456789AC0))
-#define CONTROL_RESPONSE_UUID       BT_UUID_128(BT_UUID_128_ENCODE(0x12345678, 0x1234, 0x5678, 0x1234, 0x123456789AC1))
-#define CONTROL_STATUS_UUID         BT_UUID_128(BT_UUID_128_ENCODE(0x12345678, 0x1234, 0x5678, 0x1234, 0x123456789AC2))
+/* Temporary 16-bit UUIDs to avoid macro conflicts - TODO: fix UUID system */
+#define CONTROL_SERVICE_UUID        BT_UUID_16(0xFFE0)
+#define CONTROL_COMMAND_UUID        BT_UUID_16(0xFFE1)
+#define CONTROL_RESPONSE_UUID       BT_UUID_16(0xFFE2)
+#define CONTROL_STATUS_UUID         BT_UUID_16(0xFFE3)
 
 /* ============================================================================
  * CONTROL COMMANDS

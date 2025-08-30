@@ -42,9 +42,10 @@ typedef struct {
  * DFU SERVICE DEFINITIONS
  * ============================================================================ */
 
+/* Use 16-bit UUIDs to avoid macro conflicts - DFU service keeps standard UUID */
 #define DFU_SERVICE_UUID            BT_UUID_16(0xFE59)
-#define DFU_CONTROL_POINT_UUID      BT_UUID_128(BT_UUID_128_ENCODE(0x8EC90001, 0xF315, 0x4F60, 0x9FB8, 0x838830DAEA50))
-#define DFU_PACKET_UUID             BT_UUID_128(BT_UUID_128_ENCODE(0x8EC90002, 0xF315, 0x4F60, 0x9FB8, 0x838830DAEA50))
+#define DFU_CONTROL_POINT_UUID      BT_UUID_16(0xFFD0)
+#define DFU_PACKET_UUID             BT_UUID_16(0xFFD1)
 
 /* ============================================================================
  * DFU COMMANDS AND RESPONSES

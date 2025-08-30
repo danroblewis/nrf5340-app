@@ -1,9 +1,11 @@
 #include "ble_services.h"
 #include "device_info_service.h"
+/* Temporarily disabled due to Zephyr BLE macro conflicts
 #include "dfu_service.h"
 #include "control_service.h"
 #include "data_service.h"
-/* #include "wasm_service.h" // Temporarily disabled */
+#include "wasm_service.h"
+*/
 #include <zephyr/sys/printk.h>
 
 /**
@@ -40,26 +42,25 @@ int ble_services_init(void)
         return err;
     }
     
-    /* Initialize DFU Service */
+    /* Temporarily disable custom services due to Zephyr BLE macro conflicts
     err = dfu_service_init();
     if (err) {
         printk("BLE Services: Failed to initialize DFU Service (err %d)\n", err);
         return err;
     }
     
-    /* Initialize Control Service */
     err = control_service_init();
     if (err) {
         printk("BLE Services: Failed to initialize Control Service (err %d)\n", err);
         return err;
     }
     
-    /* Initialize Data Service */
     err = data_service_init();
     if (err) {
         printk("BLE Services: Failed to initialize Data Service (err %d)\n", err);
         return err;
     }
+    */
     
     /* Initialize WASM Service */
     /* Temporarily disabled due to BLE macro issues
@@ -75,10 +76,7 @@ int ble_services_init(void)
     printk("BLE Services: All services initialized successfully\n");
     printk("BLE Services: Available services:\n");
     printk("  - Device Information Service (0x180A)\n");
-    printk("  - Device Firmware Update Service (0xFE59)\n");
-    printk("  - Custom Control Service\n");
-    printk("  - Custom Data Service\n");
-    printk("  - Custom WASM Service\n");
+    printk("BLE Services: Note - Custom services temporarily disabled due to Zephyr macro conflicts\n");
     
     return 0;
 }
@@ -102,10 +100,12 @@ void ble_services_connection_event(struct bt_conn *conn, bool connected)
            connected ? "connected" : "disconnected", active_connections);
     
     /* Notify all services of connection events */
+    /* Temporarily disabled due to Zephyr BLE macro conflicts
     dfu_service_connection_event(conn, connected);
     control_service_connection_event(conn, connected);
     data_service_connection_event(conn, connected);
-    /* wasm_service_connection_event(conn, connected); // Temporarily disabled */
+    wasm_service_connection_event(conn, connected);
+    */
 }
 
 uint8_t ble_services_get_device_status(void)
@@ -114,8 +114,8 @@ uint8_t ble_services_get_device_status(void)
         return 0; // Not initialized
     }
     
-    /* Return the control service device status as the overall status */
-    return control_service_get_device_status();
+    /* Temporarily return a fixed status since control service is disabled */
+    return 1; // DEVICE_STATUS_IDLE equivalent
 }
 
 uint8_t ble_services_get_connection_count(void)
