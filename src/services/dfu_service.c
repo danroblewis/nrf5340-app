@@ -1,10 +1,24 @@
 #include "dfu_service.h"
+#include "ble_packet_handlers.h"
 #include <zephyr/sys/printk.h>
 
 /**
  * @file dfu_service.c
  * @brief Device Firmware Update Service (0xFE59) implementation
  */
+
+/* ============================================================================
+ * PACKET TYPE DEFINITIONS
+ * ============================================================================ */
+
+typedef struct {
+    uint8_t command;
+    uint8_t param[19];  // Command parameters (up to 19 bytes)
+} __attribute__((packed)) dfu_control_packet_t;
+
+typedef struct {
+    uint8_t data[20];   // Firmware data chunk
+} __attribute__((packed)) dfu_packet_t;
 
 /* ============================================================================
  * STATIC DATA
@@ -34,25 +48,17 @@ static void dfu_control_point_indicate(uint8_t opcode, uint8_t response_code)
 }
 
 /* ============================================================================
- * CHARACTERISTIC HANDLERS
+ * SIMPLIFIED CHARACTERISTIC HANDLERS
  * ============================================================================ */
 
-static ssize_t dfu_control_point_write(struct bt_conn *conn,
-                                      const struct bt_gatt_attr *attr,
-                                      const void *buf, uint16_t len,
-                                      uint16_t offset, uint8_t flags)
+// The macro will generate dfu_control_point_write() wrapper that calls this
+static ssize_t simple_dfu_control_point_write(const dfu_control_packet_t *packet)
 {
-    const uint8_t *data = (const uint8_t *)buf;
+    printk("DFU Service: Control Point command received: 0x%02x\n", packet->command);
     
-    if (len < 1) {
-        return BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN);
-    }
+    // Note: dfu_conn needs to be set via connection event handler
     
-    printk("DFU Service: Control Point command received: 0x%02x\n", data[0]);
-    
-    dfu_conn = conn;
-    
-    switch (data[0]) {
+    switch (packet->command) {
     case DFU_CMD_START_DFU:
         printk("DFU Service: Start DFU command\n");
         dfu_state = DFU_STATE_READY;
@@ -62,11 +68,10 @@ static ssize_t dfu_control_point_write(struct bt_conn *conn,
         
     case DFU_CMD_INITIALIZE_DFU:
         printk("DFU Service: Initialize DFU command\n");
-        if (dfu_state == DFU_STATE_READY) {
-            dfu_control_point_indicate(DFU_CMD_INITIALIZE_DFU, DFU_RSP_SUCCESS);
-        } else {
-            dfu_control_point_indicate(DFU_CMD_INITIALIZE_DFU, DFU_RSP_INVALID_STATE);
-        }
+        dfu_control_point_indicate(
+            DFU_CMD_INITIALIZE_DFU,
+            (dfu_state == DFU_STATE_READY) ? DFU_RSP_SUCCESS : DFU_RSP_INVALID_STATE
+        );
         break;
         
     case DFU_CMD_RECEIVE_FW:
@@ -88,31 +93,35 @@ static ssize_t dfu_control_point_write(struct bt_conn *conn,
         break;
         
     default:
-        printk("DFU Service: Unknown command: 0x%02x\n", data[0]);
-        dfu_control_point_indicate(data[0], DFU_RSP_NOT_SUPPORTED);
+        printk("DFU Service: Unknown command: 0x%02x\n", packet->command);
+        dfu_control_point_indicate(packet->command, DFU_RSP_NOT_SUPPORTED);
         break;
     }
     
-    return len;
+    return sizeof(*packet);
 }
 
-static ssize_t dfu_packet_write(struct bt_conn *conn,
-                               const struct bt_gatt_attr *attr,
-                               const void *buf, uint16_t len,
-                               uint16_t offset, uint8_t flags)
+// The macro will generate dfu_packet_write() wrapper that calls this
+static ssize_t simple_dfu_packet_write(const dfu_packet_t *packet)
 {
     if (dfu_state != DFU_STATE_RECEIVING) {
         printk("DFU Service: Packet received but not in receive state\n");
-        return BT_GATT_ERR(BT_ATT_ERR_REQUEST_NOT_SUPPORTED);
+        return -1;  // Error
     }
     
-    dfu_bytes_received += len;
+    // Find actual data length (exclude padding zeros at end)
+    uint16_t actual_len = sizeof(*packet);
+    while (actual_len > 0 && packet->data[actual_len - 1] == 0) {
+        actual_len--;
+    }
+    
+    dfu_bytes_received += actual_len;
     printk("DFU Service: Firmware packet received: %d bytes (total: %d)\n", 
-           len, dfu_bytes_received);
+           actual_len, dfu_bytes_received);
     
     /* Mock processing - just count bytes */
     
-    return len;
+    return sizeof(*packet);
 }
 
 /* ============================================================================
@@ -121,15 +130,17 @@ static ssize_t dfu_packet_write(struct bt_conn *conn,
 
 BT_GATT_SERVICE_DEFINE(dfu_service,
     BT_GATT_PRIMARY_SERVICE(DFU_SERVICE_UUID),
-    BT_GATT_CHARACTERISTIC(DFU_CONTROL_POINT_UUID,
+    BT_GATT_CHARACTERISTIC_SIMPLE(DFU_CONTROL_POINT_UUID,
                           BT_GATT_CHRC_WRITE | BT_GATT_CHRC_INDICATE,
                           BT_GATT_PERM_WRITE,
-                          NULL, dfu_control_point_write, NULL),
+                          NULL, dfu_control_point_write, NULL,
+                          void, dfu_control_packet_t),
     BT_GATT_CCC(NULL, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
-    BT_GATT_CHARACTERISTIC(DFU_PACKET_UUID,
+    BT_GATT_CHARACTERISTIC_SIMPLE(DFU_PACKET_UUID,
                           BT_GATT_CHRC_WRITE_WITHOUT_RESP,
                           BT_GATT_PERM_WRITE,
-                          NULL, dfu_packet_write, NULL),
+                          NULL, dfu_packet_write, NULL,
+                          void, dfu_packet_t),
 );
 
 /* ============================================================================
