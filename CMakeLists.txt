@@ -15,10 +15,18 @@ set(CMAKE_ASM_COMPILER ${CMAKE_ASM_COMPILER} CACHE STRING "ASM compiler" FORCE)
 target_sources(app PRIVATE
     src/main.c
     src/wasm3_wrapper.c
+    src/services/ble_services.c
+    src/services/device_info_service.c
+    src/services/dfu_service.c
+    src/services/control_service.c
+    src/services/data_service.c
 )
 
-# Include wasm3 headers
-target_include_directories(app PRIVATE $ENV{NCS_ROOT}/modules/lib/wasm3/source)
+# Include wasm3 headers and our services
+target_include_directories(app PRIVATE 
+    $ENV{NCS_ROOT}/modules/lib/wasm3/source
+    src/services
+)
 
 # Build wasm3 sources directly as part of our project
 target_sources(app PRIVATE
