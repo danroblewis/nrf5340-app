@@ -54,11 +54,16 @@ typedef struct {
  * DATA SERVICE DEFINITIONS
  * ============================================================================ */
 
-/* Temporary 16-bit UUIDs to avoid macro conflicts - TODO: fix UUID system */
-#define DATA_SERVICE_UUID           BT_UUID_16(0xFFF0)
-#define DATA_UPLOAD_UUID            BT_UUID_16(0xFFF1)
-#define DATA_DOWNLOAD_UUID          BT_UUID_16(0xFFF2)
-#define DATA_TRANSFER_STATUS_UUID   BT_UUID_16(0xFFF3)
+/* Static UUID definitions to avoid macro conflicts */
+static const struct bt_uuid_16 data_service_uuid = BT_UUID_INIT_16(0xFFF0);
+static const struct bt_uuid_16 data_upload_uuid = BT_UUID_INIT_16(0xFFF1);
+static const struct bt_uuid_16 data_download_uuid = BT_UUID_INIT_16(0xFFF2);
+static const struct bt_uuid_16 data_transfer_status_uuid = BT_UUID_INIT_16(0xFFF3);
+
+#define DATA_SERVICE_UUID           (&data_service_uuid.uuid)
+#define DATA_UPLOAD_UUID            (&data_upload_uuid.uuid)
+#define DATA_DOWNLOAD_UUID          (&data_download_uuid.uuid)
+#define DATA_TRANSFER_STATUS_UUID   (&data_transfer_status_uuid.uuid)
 
 /* ============================================================================
  * TRANSFER STATUS CODES

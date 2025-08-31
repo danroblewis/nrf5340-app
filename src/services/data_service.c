@@ -32,6 +32,7 @@ static uint16_t download_data_length = 0;
  */
 static ssize_t data_upload_handler(const data_upload_packet_t *packet)
 {
+    printk("\n=== Data Service: data_upload_handler called ===\n");
     printk("Data Service: Upload received %zu bytes\n", sizeof(*packet));
     
     // Find actual data length (exclude padding zeros)
@@ -72,6 +73,7 @@ static ssize_t data_upload_handler(const data_upload_packet_t *packet)
  */
 static ssize_t data_download_handler(data_download_packet_t *response)
 {
+    printk("\n=== Data Service: data_download_handler called ===\n");
     printk("Data Service: Download request\n");
     
     if (download_data_length == 0) {
@@ -99,6 +101,7 @@ static ssize_t data_download_handler(data_download_packet_t *response)
  */
 static ssize_t data_transfer_status_handler(data_transfer_status_packet_t *status)
 {
+    printk("\n=== Data Service: data_transfer_status_handler called ===\n");
     printk("Data Service: Transfer status read (status: %d, size: %d)\n", 
            transfer_status, data_buffer_size);
     
@@ -116,11 +119,6 @@ static ssize_t data_transfer_status_handler(data_transfer_status_packet_t *statu
 /* ============================================================================
  * CLEAN HANDLERS - WORK WITH STRUCTS DIRECTLY
  * ============================================================================ */
-
-/* Declare the clean handlers we want to write */
-DECLARE_WRITE_HANDLER(data_upload_handler, data_upload_packet_t);
-DECLARE_READ_HANDLER(data_download_handler, data_download_packet_t);
-DECLARE_READ_HANDLER(data_transfer_status_handler, data_transfer_status_packet_t);
 
 /* Generate BLE wrappers automatically */
 BLE_WRITE_WRAPPER(data_upload_handler, data_upload_packet_t)
@@ -237,6 +235,10 @@ void data_service_process_data(const uint8_t *data, uint16_t length)
         }
         printk("\n");
     }
+    
+    /* Store the uploaded data for download - this enables round-trip testing */
+    data_service_set_download_data(data, length);
+    printk("Data Service: Data stored for download\n");
     
     /* Custom processing can be added here */
     /* For example: parse commands, store to flash, etc. */

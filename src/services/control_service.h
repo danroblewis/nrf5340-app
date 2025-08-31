@@ -59,11 +59,16 @@ typedef struct {
  * CONTROL SERVICE DEFINITIONS
  * ============================================================================ */
 
-/* Temporary 16-bit UUIDs to avoid macro conflicts - TODO: fix UUID system */
-#define CONTROL_SERVICE_UUID        BT_UUID_16(0xFFE0)
-#define CONTROL_COMMAND_UUID        BT_UUID_16(0xFFE1)
-#define CONTROL_RESPONSE_UUID       BT_UUID_16(0xFFE2)
-#define CONTROL_STATUS_UUID         BT_UUID_16(0xFFE3)
+/* Static UUID definitions to avoid macro conflicts */
+static const struct bt_uuid_16 control_service_uuid = BT_UUID_INIT_16(0xFFE0);
+static const struct bt_uuid_16 control_command_uuid = BT_UUID_INIT_16(0xFFE1);
+static const struct bt_uuid_16 control_response_uuid = BT_UUID_INIT_16(0xFFE2);
+static const struct bt_uuid_16 control_status_uuid = BT_UUID_INIT_16(0xFFE3);
+
+#define CONTROL_SERVICE_UUID        (&control_service_uuid.uuid)
+#define CONTROL_COMMAND_UUID        (&control_command_uuid.uuid)
+#define CONTROL_RESPONSE_UUID       (&control_response_uuid.uuid)
+#define CONTROL_STATUS_UUID         (&control_status_uuid.uuid)
 
 /* ============================================================================
  * CONTROL COMMANDS

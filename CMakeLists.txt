@@ -17,11 +17,11 @@ target_sources(app PRIVATE
     src/wasm3_wrapper.c
     src/services/ble_services.c
     src/services/device_info_service.c
-    # Temporarily disable custom services due to Zephyr BLE macro conflicts
-    # src/services/dfu_service.c
-    # src/services/control_service.c
-    # src/services/data_service.c
-    # src/services/wasm_service.c
+    # Re-enabling services with fixed UUID approach
+    src/services/control_service.c
+    src/services/data_service.c
+    src/services/dfu_service.c
+    # src/services/wasm_service.c  # Keep WASM disabled for now
 )
 
 # Include wasm3 headers and our services

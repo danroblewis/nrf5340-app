@@ -22,40 +22,55 @@ static char software_revision[32] = DEVICE_SOFTWARE_REVISION;
 // The macro will generate read_manufacturer_name() wrapper that calls this
 static ssize_t manufacturer_name_handler(device_info_string_t *response)
 {
+    printk("\n=== Device Info Service: manufacturer_name_handler called ===\n");
+    printk("Device Info: Reading manufacturer name\n");
     strncpy(response->text, DEVICE_MANUFACTURER_NAME, sizeof(response->text) - 1);
     response->text[sizeof(response->text) - 1] = '\0';
+    printk("Device Info: Returning manufacturer: %s\n", response->text);
     return strlen(response->text);
 }
 
 // The macro will generate read_model_number() wrapper that calls this
 static ssize_t model_number_handler(device_info_string_t *response)
 {
+    printk("\n=== Device Info Service: model_number_handler called ===\n");
+    printk("Device Info: Reading model number\n");
     strncpy(response->text, DEVICE_MODEL_NUMBER, sizeof(response->text) - 1);
     response->text[sizeof(response->text) - 1] = '\0';
+    printk("Device Info: Returning model: %s\n", response->text);
     return strlen(response->text);
 }
 
 // The macro will generate read_firmware_revision() wrapper that calls this
 static ssize_t firmware_revision_handler(device_info_string_t *response)
 {
+    printk("\n=== Device Info Service: firmware_revision_handler called ===\n");
+    printk("Device Info: Reading firmware revision\n");
     strncpy(response->text, firmware_revision, sizeof(response->text) - 1);
     response->text[sizeof(response->text) - 1] = '\0';
+    printk("Device Info: Returning firmware: %s\n", response->text);
     return strlen(response->text);
 }
 
 // The macro will generate read_hardware_revision() wrapper that calls this
 static ssize_t hardware_revision_handler(device_info_string_t *response)
 {
+    printk("\n=== Device Info Service: hardware_revision_handler called ===\n");
+    printk("Device Info: Reading hardware revision\n");
     strncpy(response->text, DEVICE_HARDWARE_REVISION, sizeof(response->text) - 1);
     response->text[sizeof(response->text) - 1] = '\0';
+    printk("Device Info: Returning hardware: %s\n", response->text);
     return strlen(response->text);
 }
 
 // The macro will generate read_software_revision() wrapper that calls this
 static ssize_t software_revision_handler(device_info_string_t *response)
 {
+    printk("\n=== Device Info Service: software_revision_handler called ===\n");
+    printk("Device Info: Reading software revision\n");
     strncpy(response->text, software_revision, sizeof(response->text) - 1);
     response->text[sizeof(response->text) - 1] = '\0';
+    printk("Device Info: Returning software: %s\n", response->text);
     return strlen(response->text);
 }
 
@@ -111,12 +126,14 @@ BT_GATT_SERVICE_DEFINE(device_info_service,
 
 int device_info_service_init(void)
 {
-    printk("Device Info Service: Initialized\n");
-    printk("  Manufacturer: %s\n", DEVICE_MANUFACTURER_NAME);
-    printk("  Model: %s\n", DEVICE_MODEL_NUMBER);
-    printk("  Firmware: %s\n", firmware_revision);
-    printk("  Hardware: %s\n", DEVICE_HARDWARE_REVISION);
-    printk("  Software: %s\n", software_revision);
+    printk("Device Info Service: 🔧 Initializing Device Information Service...\n");
+    printk("Device Info Service: Registering 5 characteristics:\n");
+    printk("  📝 Manufacturer: %s\n", DEVICE_MANUFACTURER_NAME);
+    printk("  📝 Model: %s\n", DEVICE_MODEL_NUMBER);
+    printk("  📝 Firmware: %s\n", firmware_revision);
+    printk("  📝 Hardware: %s\n", DEVICE_HARDWARE_REVISION);
+    printk("  📝 Software: %s\n", software_revision);
+    printk("Device Info Service: ✅ Service ready for BLE clients\n");
     
     return 0;
 }

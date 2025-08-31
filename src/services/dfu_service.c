@@ -45,6 +45,7 @@ static void dfu_control_point_indicate(uint8_t opcode, uint8_t response_code)
  */
 static ssize_t dfu_control_point_handler(const dfu_control_packet_t *packet)
 {
+    printk("\n=== DFU Service: dfu_control_point_handler called ===\n");
     printk("DFU Service: Control Point command received: 0x%02x\n", packet->command);
     
     // Note: dfu_conn needs to be set via connection event handler
@@ -99,6 +100,7 @@ static ssize_t dfu_control_point_handler(const dfu_control_packet_t *packet)
  */
 static ssize_t dfu_packet_handler(const dfu_packet_t *packet)
 {
+    printk("\n=== DFU Service: dfu_packet_handler called ===\n");
     if (dfu_state != DFU_STATE_RECEIVING) {
         printk("DFU Service: Packet received but not in receive state\n");
         return -1;  // Error
@@ -126,10 +128,6 @@ static ssize_t dfu_packet_handler(const dfu_packet_t *packet)
 /* ============================================================================
  * CLEAN HANDLERS - WORK WITH STRUCTS DIRECTLY
  * ============================================================================ */
-
-/* Declare the clean handlers we want to write */
-DECLARE_WRITE_HANDLER(dfu_control_point_handler, dfu_control_packet_t);
-DECLARE_WRITE_HANDLER(dfu_packet_handler, dfu_packet_t);
 
 /* Generate BLE wrappers automatically */
 BLE_WRITE_WRAPPER(dfu_control_point_handler, dfu_control_packet_t)

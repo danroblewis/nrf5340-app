@@ -43,6 +43,7 @@ static void control_notify_response(void)
  */
 static ssize_t control_command_handler(const control_command_packet_t *packet)
 {
+    printk("\n=== Control Service: control_command_handler called ===\n");
     printk("Control Service: Command received: 0x%02x\n", packet->cmd_id);
     
     last_response.cmd_id = packet->cmd_id;
@@ -94,6 +95,7 @@ static ssize_t control_command_handler(const control_command_packet_t *packet)
  */
 static ssize_t control_response_handler(control_response_packet_t *response)
 {
+    printk("\n=== Control Service: control_response_handler called ===\n");
     printk("Control Service: Response read request\n");
     
     if (last_response_valid) {
@@ -114,6 +116,7 @@ static ssize_t control_response_handler(control_response_packet_t *response)
  */
 static ssize_t control_status_handler(control_status_packet_t *status)
 {
+    printk("\n=== Control Service: control_status_handler called ===\n");
     printk("Control Service: Status read request (status: %d)\n", device_status);
     
     status->device_status = device_status;
@@ -132,11 +135,6 @@ static ssize_t control_status_handler(control_status_packet_t *status)
 /* ============================================================================
  * CLEAN HANDLERS - WORK WITH STRUCTS DIRECTLY
  * ============================================================================ */
-
-/* Declare the clean handlers we want to write */
-DECLARE_WRITE_HANDLER(control_command_handler, control_command_packet_t);
-DECLARE_READ_HANDLER(control_response_handler, control_response_packet_t);
-DECLARE_READ_HANDLER(control_status_handler, control_status_packet_t);
 
 /* Generate BLE wrappers automatically */
 BLE_WRITE_WRAPPER(control_command_handler, control_command_packet_t)
