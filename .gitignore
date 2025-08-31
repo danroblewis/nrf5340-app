@@ -24,6 +24,12 @@ __pycache__/
 *.so
 .pytest_cache/
 
+# Rust build artifacts and cache
+target/
+Cargo.lock
+**/*.rs.bk
+*.pdb
+
 # OS files
 .DS_Store
 Thumbs.db

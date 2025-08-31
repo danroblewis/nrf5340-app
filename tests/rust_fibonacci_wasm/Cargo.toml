@@ -1,0 +1,15 @@
+[package]
+name = "fibonacci_wasm"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+
+# Optimize for small code size in release builds
+[profile.release]
+opt-level = "s"
+lto = true
+panic = "abort"
