@@ -106,6 +106,146 @@ class TestResults:
             return False
 
 # ============================================================================
+# MTU Testing Functions
+# ============================================================================
+
+async def test_mtu_negotiation(client, results):
+    """Test MTU negotiation and large packet support"""
+    logger.info("🔄 Testing MTU negotiation...")
+    
+    try:
+        # Get initial MTU
+        initial_mtu = client.mtu_size
+        logger.info(f"📏 Initial MTU: {initial_mtu} bytes")
+        
+        # Request larger MTU
+        requested_mtu = 247
+        logger.info(f"📡 Requesting MTU: {requested_mtu} bytes...")
+        
+        await client.request_mtu(requested_mtu)
+        negotiated_mtu = client.mtu_size
+        
+        logger.info(f"✅ MTU negotiated: {negotiated_mtu} bytes")
+        payload_size = negotiated_mtu - 3  # ATT header is 3 bytes
+        logger.info(f"📦 Max payload size: {payload_size} bytes")
+        
+        # Test MTU negotiation success
+        if negotiated_mtu > initial_mtu:
+            results.add_result("MTU Negotiation", True)
+        else:
+            results.add_result("MTU Negotiation", False, f"MTU not increased (stayed at {negotiated_mtu})")
+        
+        # Test large packet capability
+        if negotiated_mtu >= 247:
+            logger.info("🚀 Large packet support: ENABLED (244+ byte payloads)")
+            results.add_result("Large Packet Support", True)
+        elif negotiated_mtu >= 50:
+            logger.info(f"📊 Medium packet support: ENABLED ({payload_size} byte payloads)")
+            results.add_result("Medium Packet Support", True)
+            results.add_result("Large Packet Support", False, "MTU too small for large packets")
+        else:
+            logger.info("⚠️  Using minimum MTU (20 byte payloads)")
+            results.add_result("Medium Packet Support", False, "MTU too small for medium packets")
+            results.add_result("Large Packet Support", False, "MTU too small for large packets")
+        
+        return negotiated_mtu, payload_size
+        
+    except Exception as e:
+        logger.error(f"❌ MTU negotiation failed: {e}")
+        results.add_result("MTU Negotiation", False, str(e))
+        results.add_result("Large Packet Support", False, "MTU negotiation failed")
+        return client.mtu_size, client.mtu_size - 3
+
+def generate_test_data(size):
+    """Generate test data with verification pattern"""
+    # Use a repeating pattern for verification
+    pattern = b'\xAA\xBB\xCC\xDD\xEE\xFF'
+    data = (pattern * ((size // len(pattern)) + 1))[:size]
+    
+    # Add size marker at the beginning
+    if size >= 4:
+        data = struct.pack('<I', size) + data[4:]
+    
+    return data
+
+def verify_test_data(data, expected_size):
+    """Verify test data integrity"""
+    if len(data) != expected_size:
+        return False, f"Size mismatch: got {len(data)}, expected {expected_size}"
+    
+    if expected_size >= 4:
+        # Check size marker
+        size_marker = struct.unpack('<I', data[:4])[0]
+        if size_marker != expected_size:
+            return False, f"Size marker mismatch: got {size_marker}, expected {expected_size}"
+    
+    return True, "Data verified successfully"
+
+async def test_packet_sizes(client, results, max_payload):
+    """Test different packet sizes based on negotiated MTU"""
+    logger.info("📦 Testing packet sizes...")
+    
+    # Find Data Service characteristics
+    data_service = None
+    for service in client.services:
+        if service.uuid.lower() == DATA_SERVICE_UUID.lower():
+            data_service = service
+            break
+    
+    if not data_service:
+        results.add_result("Packet Size Tests", False, "Data Service not found")
+        return
+    
+    upload_char = None
+    download_char = None
+    
+    for char in data_service.characteristics:
+        if char.uuid.lower() == DATA_UPLOAD_UUID.lower():
+            upload_char = char
+        elif char.uuid.lower() == DATA_DOWNLOAD_UUID.lower():
+            download_char = char
+    
+    if not upload_char or not download_char:
+        results.add_result("Packet Size Tests", False, "Required characteristics not found")
+        return
+    
+    # Test different packet sizes
+    test_sizes = [20]  # Always test minimum
+    
+    if max_payload >= 47:
+        test_sizes.append(47)
+    if max_payload >= 244:
+        test_sizes.append(244)
+    if max_payload > 20 and max_payload not in test_sizes:
+        test_sizes.append(max_payload)
+    
+    for size in test_sizes:
+        try:
+            logger.info(f"  📤 Testing {size} byte packets...")
+            
+            # Generate and send test data
+            test_data = generate_test_data(size)
+            await client.write_gatt_char(upload_char, test_data)
+            
+            # Small delay for processing
+            await asyncio.sleep(0.1)
+            
+            # Read back and verify
+            received_data = await client.read_gatt_char(download_char)
+            is_valid, message = verify_test_data(received_data, size)
+            
+            if is_valid:
+                results.add_result(f"Packet Size {size}B", True)
+                logger.info(f"  ✅ {size} byte packets: PASSED")
+            else:
+                results.add_result(f"Packet Size {size}B", False, message)
+                logger.error(f"  ❌ {size} byte packets: FAILED - {message}")
+                
+        except Exception as e:
+            results.add_result(f"Packet Size {size}B", False, str(e))
+            logger.error(f"  ❌ {size} byte packets: FAILED - {e}")
+
+# ============================================================================
 # Device Discovery and Connection
 # ============================================================================
 
@@ -448,6 +588,14 @@ async def run_comprehensive_tests():
                 
                 logger.info(f"  🔹 {service.uuid} ({service_name})")
             
+            logger.info("")
+            
+            # Test MTU negotiation and large packet support
+            negotiated_mtu, max_payload = await test_mtu_negotiation(client, results)
+            logger.info("")
+            
+            # Test different packet sizes
+            await test_packet_sizes(client, results, max_payload)
             logger.info("")
             
             # Run all service tests

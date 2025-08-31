@@ -8,6 +8,7 @@
 #include "wasm_service.h"
 */
 #include <zephyr/sys/printk.h>
+#include <zephyr/bluetooth/gatt.h>
 
 /**
  * @file ble_services.c
@@ -20,6 +21,7 @@
 
 static bool services_initialized = false;
 static uint8_t active_connections = 0;
+static uint16_t current_mtu = 23;  /* Default BLE MTU */
 
 /* ============================================================================
  * PUBLIC FUNCTIONS
@@ -154,4 +156,50 @@ uint8_t ble_services_get_wasm_status(void)
     return wasm_service_get_status();
     */
     return 0; // Service disabled
+}
+
+uint16_t ble_services_get_current_mtu(void)
+{
+    return current_mtu;
+}
+
+/* ============================================================================
+ * MTU EXCHANGE CALLBACK
+ * ============================================================================ */
+
+static void mtu_exchange_cb(struct bt_conn *conn, uint8_t err, struct bt_gatt_exchange_params *params)
+{
+    if (err) {
+        printk("BLE Services: MTU exchange failed (err %d)\n", err);
+        return;
+    }
+    
+    current_mtu = bt_gatt_get_mtu(conn);
+    printk("BLE Services: 🔄 MTU negotiated: %d bytes\n", current_mtu);
+    printk("BLE Services: 📦 Max payload size: %d bytes\n", current_mtu - 3); /* ATT header is 3 bytes */
+    
+    /* Log what this enables */
+    if (current_mtu >= 247) {
+        printk("BLE Services: ✅ Large packet support enabled (244+ byte payloads)\n");
+        printk("BLE Services: 🚀 WASM service can use full-size packets\n");
+    } else if (current_mtu >= 50) {
+        printk("BLE Services: ✅ Medium packet support enabled (%d byte payloads)\n", current_mtu - 3);
+    } else {
+        printk("BLE Services: ⚠️  Using minimum MTU - limited to %d byte payloads\n", current_mtu - 3);
+    }
+}
+
+static struct bt_gatt_exchange_params mtu_exchange_params = {
+    .func = mtu_exchange_cb
+};
+
+int ble_services_request_mtu_exchange(struct bt_conn *conn)
+{
+    if (!conn) {
+        printk("BLE Services: Cannot request MTU exchange - no connection\n");
+        return -EINVAL;
+    }
+    
+    printk("BLE Services: 📡 Requesting MTU exchange...\n");
+    return bt_gatt_exchange_mtu(conn, &mtu_exchange_params);
 }

@@ -18,24 +18,33 @@
  * PACKET TYPE DEFINITIONS
  * ============================================================================ */
 
+/* Maximum packet sizes for different MTU scenarios */
+#define DATA_PACKET_SIZE_MIN        20      /* Minimum BLE packet (MTU 23) */
+#define DATA_PACKET_SIZE_MEDIUM     47      /* Medium packet (MTU 50) */
+#define DATA_PACKET_SIZE_LARGE      244     /* Large packet (MTU 247) */
+#define DATA_PACKET_SIZE_MAX        244     /* Maximum supported */
+
 /**
- * @brief Data upload packet structure
+ * @brief Data upload packet structure (variable size)
  * 
  * Used for uploading data chunks to the device.
- * Total size: 20 bytes (maximum BLE packet size)
+ * Size adapts based on negotiated MTU:
+ * - MTU 23: 20 bytes payload
+ * - MTU 50+: 47 bytes payload  
+ * - MTU 247+: 244 bytes payload
  */
 typedef struct {
-    uint8_t data[20];  ///< Data payload (up to 20 bytes)
+    uint8_t data[DATA_PACKET_SIZE_MAX];  ///< Data payload (up to 244 bytes)
 } __attribute__((packed)) data_upload_packet_t;
 
 /**
- * @brief Data download packet structure
+ * @brief Data download packet structure (variable size)
  * 
  * Used for downloading data chunks from the device.
- * Total size: 20 bytes
+ * Size adapts based on negotiated MTU.
  */
 typedef struct {
-    uint8_t data[20];  ///< Data payload (up to 20 bytes)
+    uint8_t data[DATA_PACKET_SIZE_MAX];  ///< Data payload (up to 244 bytes)
 } __attribute__((packed)) data_download_packet_t;
 
 /**
@@ -147,5 +156,21 @@ int data_service_set_download_data(const uint8_t *data, uint16_t length);
  * @param length Length of received data
  */
 void data_service_process_data(const uint8_t *data, uint16_t length);
+
+/* ============================================================================
+ * MTU-AWARE PACKET SIZE HELPERS
+ * ============================================================================ */
+
+/**
+ * @brief Get optimal packet size based on current MTU
+ * @return Packet size in bytes (20, 47, or 244)
+ */
+uint16_t data_service_get_packet_size(void);
+
+/**
+ * @brief Check if large packets are supported
+ * @return True if MTU supports 244+ byte packets
+ */
+bool data_service_supports_large_packets(void);
 
 #endif /* DATA_SERVICE_H */

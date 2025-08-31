@@ -36,6 +36,12 @@ static void connected(struct bt_conn *conn, uint8_t err)
     
     /* Notify all services of connection */
     ble_services_connection_event(conn, true);
+    
+    /* Request MTU exchange for large packet support */
+    int mtu_err = ble_services_request_mtu_exchange(conn);
+    if (mtu_err) {
+        printk("MTU exchange request failed (err %d)\n", mtu_err);
+    }
 }
 
 static void disconnected(struct bt_conn *conn, uint8_t reason)

@@ -58,4 +58,17 @@ uint8_t ble_services_get_connection_count(void);
  */
 bool ble_services_are_initialized(void);
 
+/**
+ * @brief Get current negotiated MTU size
+ * @return Current MTU in bytes
+ */
+uint16_t ble_services_get_current_mtu(void);
+
+/**
+ * @brief Request MTU exchange with connected client
+ * @param conn Connection handle
+ * @return 0 on success, negative error code on failure
+ */
+int ble_services_request_mtu_exchange(struct bt_conn *conn);
+
 #endif /* BLE_SERVICES_H */

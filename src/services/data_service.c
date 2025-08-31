@@ -1,5 +1,6 @@
 #include "data_service.h"
 #include "ble_packet_handlers.h"
+#include "ble_services.h"
 #include <zephyr/sys/printk.h>
 #include <string.h>
 
@@ -27,43 +28,38 @@ static uint16_t download_data_length = 0;
 
 // The macro will generate data_upload_write() wrapper that calls this
 /**
- * @brief Handle data upload requests - CLEAN VERSION!
- * This function takes your struct directly, no BLE boilerplate needed.
+ * @brief Handle data upload requests - VARIABLE LENGTH VERSION!
+ * This function receives raw data with variable length.
  */
-static ssize_t data_upload_handler(const data_upload_packet_t *packet)
+static ssize_t data_upload_handler(const void *data, uint16_t len)
 {
     printk("\n=== Data Service: data_upload_handler called ===\n");
-    printk("Data Service: Upload received %zu bytes\n", sizeof(*packet));
+    printk("Data Service: Upload received %d bytes\n", len);
     
-    // Find actual data length (exclude padding zeros)
-    uint16_t actual_len = sizeof(*packet);
-    while (actual_len > 0 && packet->data[actual_len - 1] == 0) {
-        actual_len--;
-    }
-    
-    if (data_buffer_size + actual_len > DATA_BUFFER_SIZE) {
+    if (data_buffer_size + len > DATA_BUFFER_SIZE) {
         printk("Data Service: Buffer overflow, resetting\n");
         data_buffer_size = 0;
         transfer_status = TRANSFER_STATUS_ERROR;
         return -1;
     }
     
-    memcpy(data_buffer + data_buffer_size, packet->data, actual_len);
-    data_buffer_size += actual_len;
+    memcpy(data_buffer + data_buffer_size, data, len);
+    data_buffer_size += len;
     transfer_status = TRANSFER_STATUS_RECEIVING;
     
     printk("Data Service: Total received: %d bytes\n", data_buffer_size);
     
-    /* Check for end marker or complete message */
-    if (actual_len < sizeof(*packet)) { // Assume end of transmission if not full packet
-        transfer_status = TRANSFER_STATUS_COMPLETE;
-        printk("Data Service: Transfer complete\n");
-        
-        /* Process received data */
-        data_service_process_data(data_buffer, data_buffer_size);
-    }
+    /* For testing, assume each write is a complete message */
+    transfer_status = TRANSFER_STATUS_COMPLETE;
+    printk("Data Service: Transfer complete\n");
     
-    return sizeof(*packet);
+    /* Process received data */
+    data_service_process_data(data_buffer, data_buffer_size);
+    
+    /* Reset buffer for next transfer */
+    data_buffer_size = 0;
+    
+    return len;
 }
 
 // The macro will generate data_download_read() wrapper that calls this
@@ -80,18 +76,16 @@ static ssize_t data_download_handler(data_download_packet_t *response)
         download_data_length = strlen(download_data);
     }
     
-    // For simplicity, just copy the sample data into the response
+    // Copy the actual data length, not the maximum struct size
     uint16_t copy_len = (download_data_length < sizeof(response->data)) ? 
                         download_data_length : sizeof(response->data);
     
     memcpy(response->data, download_data, copy_len);
     
-    // Pad with zeros if needed
-    if (copy_len < sizeof(response->data)) {
-        memset(&response->data[copy_len], 0, sizeof(response->data) - copy_len);
-    }
+    printk("Data Service: Returning %d bytes\n", copy_len);
     
-    return sizeof(*response);
+    // Return only the actual data length, not the full struct size
+    return copy_len;
 }
 
 // The macro will generate data_transfer_status_read() wrapper that calls this  
@@ -121,7 +115,7 @@ static ssize_t data_transfer_status_handler(data_transfer_status_packet_t *statu
  * ============================================================================ */
 
 /* Generate BLE wrappers automatically */
-BLE_WRITE_WRAPPER(data_upload_handler, data_upload_packet_t)
+BLE_WRITE_WRAPPER_VARIABLE(data_upload_handler, 1, DATA_PACKET_SIZE_MAX)
 BLE_READ_WRAPPER(data_download_handler, data_download_packet_t)
 BLE_READ_WRAPPER(data_transfer_status_handler, data_transfer_status_packet_t)
 
@@ -242,4 +236,27 @@ void data_service_process_data(const uint8_t *data, uint16_t length)
     
     /* Custom processing can be added here */
     /* For example: parse commands, store to flash, etc. */
+}
+
+/* ============================================================================
+ * MTU-AWARE PACKET SIZE HELPERS
+ * ============================================================================ */
+
+uint16_t data_service_get_packet_size(void)
+{
+    uint16_t mtu = ble_services_get_current_mtu();
+    uint16_t payload_size = mtu - 3;  /* ATT header is 3 bytes */
+    
+    if (payload_size >= DATA_PACKET_SIZE_LARGE) {
+        return DATA_PACKET_SIZE_LARGE;  /* 244 bytes */
+    } else if (payload_size >= DATA_PACKET_SIZE_MEDIUM) {
+        return DATA_PACKET_SIZE_MEDIUM; /* 47 bytes */
+    } else {
+        return DATA_PACKET_SIZE_MIN;    /* 20 bytes */
+    }
+}
+
+bool data_service_supports_large_packets(void)
+{
+    return data_service_get_packet_size() >= DATA_PACKET_SIZE_LARGE;
 }

@@ -81,6 +81,22 @@
         return handler_name(packet); \
     }
 
+/* Generate a BLE write wrapper for variable-length data */
+#define BLE_WRITE_WRAPPER_VARIABLE(handler_name, min_size, max_size) \
+    static ssize_t handler_name##_ble(struct bt_conn *conn, const struct bt_gatt_attr *attr, \
+                                      const void *buf, uint16_t len, uint16_t offset, uint8_t flags) \
+    { \
+        if (len < min_size) { \
+            printk(#handler_name ": Packet too small (%d < %d)\n", len, min_size); \
+            return BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN); \
+        } \
+        if (len > max_size) { \
+            printk(#handler_name ": Packet too large (%d > %d)\n", len, max_size); \
+            return BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN); \
+        } \
+        return handler_name(buf, len); \
+    }
+
 /* Generate a BLE read wrapper for a clean handler function */
 #define BLE_READ_WRAPPER(handler_name, struct_type) \
     static ssize_t handler_name##_ble(struct bt_conn *conn, const struct bt_gatt_attr *attr, \
