@@ -23,25 +23,18 @@
  * SERVICE AND CHARACTERISTIC UUIDs
  * ============================================================================ */
 
-/* WASM Service UUID: 12345678-1234-5678-9abc-def012345006 */
-#define WASM_SERVICE_UUID \
-    BT_UUID_128_ENCODE(0x12345678, 0x1234, 0x5678, 0x9abc, 0xdef012345006)
+/* Static UUID definitions to avoid macro conflicts */
+static const struct bt_uuid_16 wasm_service_uuid = BT_UUID_INIT_16(0xFFF7);
+static const struct bt_uuid_16 wasm_upload_uuid = BT_UUID_INIT_16(0xFFF6);
+static const struct bt_uuid_16 wasm_execute_uuid = BT_UUID_INIT_16(0xFFF5);
+static const struct bt_uuid_16 wasm_status_uuid = BT_UUID_INIT_16(0xFFF4);
+static const struct bt_uuid_16 wasm_result_uuid = BT_UUID_INIT_16(0xFFF3);
 
-/* WASM Upload Characteristic: 12345678-1234-5678-9abc-def012345016 */
-#define WASM_UPLOAD_UUID \
-    BT_UUID_128_ENCODE(0x12345678, 0x1234, 0x5678, 0x9abc, 0xdef012345016)
-
-/* WASM Execute Characteristic: 12345678-1234-5678-9abc-def012345026 */
-#define WASM_EXECUTE_UUID \
-    BT_UUID_128_ENCODE(0x12345678, 0x1234, 0x5678, 0x9abc, 0xdef012345026)
-
-/* WASM Status Characteristic: 12345678-1234-5678-9abc-def012345036 */
-#define WASM_STATUS_UUID \
-    BT_UUID_128_ENCODE(0x12345678, 0x1234, 0x5678, 0x9abc, 0xdef012345036)
-
-/* WASM Result Characteristic: 12345678-1234-5678-9abc-def012345046 */
-#define WASM_RESULT_UUID \
-    BT_UUID_128_ENCODE(0x12345678, 0x1234, 0x5678, 0x9abc, 0xdef012345046)
+#define WASM_SERVICE_UUID       (&wasm_service_uuid.uuid)
+#define WASM_UPLOAD_UUID        (&wasm_upload_uuid.uuid)
+#define WASM_EXECUTE_UUID       (&wasm_execute_uuid.uuid)
+#define WASM_STATUS_UUID        (&wasm_status_uuid.uuid)
+#define WASM_RESULT_UUID        (&wasm_result_uuid.uuid)
 
 /* ============================================================================
  * CONFIGURATION

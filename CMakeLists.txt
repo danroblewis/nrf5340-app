@@ -14,7 +14,6 @@ set(CMAKE_ASM_COMPILER ${CMAKE_ASM_COMPILER} CACHE STRING "ASM compiler" FORCE)
 # Create our app target
 target_sources(app PRIVATE
     src/main.c
-    src/wasm3_wrapper.c
     src/services/ble_services.c
     src/services/device_info_service.c
     # Re-enabling services with fixed UUID approach
@@ -22,7 +21,7 @@ target_sources(app PRIVATE
     src/services/data_service.c
     src/services/dfu_service.c
     src/services/sprite_service.c
-    # src/services/wasm_service.c  # Keep WASM disabled for now
+    src/services/wasm_service.c
 )
 
 # Include wasm3 headers and our services

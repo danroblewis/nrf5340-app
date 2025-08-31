@@ -1,8 +1,18 @@
 #include "wasm_service.h"
-#include "../wasm3_wrapper.h"
+#include "ble_packet_handlers.h"
+#include "ble_services.h"
 #include <zephyr/sys/printk.h>
 #include <zephyr/sys/crc.h>
 #include <string.h>
+
+/* Direct WASM3 includes - no more wrapper */
+#include "m3_core.h"
+#include "m3_env.h"
+#include "m3_info.h"
+#include "m3_api_libc.h"
+
+/* WASM3 error constants */
+#define m3Err_none NULL
 
 /**
  * @file wasm_service.c
@@ -25,8 +35,10 @@ static uint8_t wasm_status = WASM_STATUS_IDLE;
 static uint8_t wasm_error_code = WASM_ERROR_NONE;
 static struct bt_conn *wasm_conn = NULL;
 
-/* WASM3 runtime */
-static wasm3_runtime_t wasm_runtime;
+/* WASM3 runtime - direct WASM3 structures */
+static IM3Environment wasm_env = NULL;
+static IM3Runtime wasm_runtime = NULL;
+static IM3Module wasm_module = NULL;
 static bool wasm_runtime_initialized = false;
 
 /* Last execution result */
@@ -59,21 +71,26 @@ static int ensure_wasm_runtime(void)
         return 0;
     }
     
-    wasm3_config_t config = {
-        .stack_size = 8192,     /* 8KB stack */
-        .heap_size = 8192,      /* 8KB heap */
-        .enable_tracing = 0
-    };
-    
-    int ret = wasm3_init(&wasm_runtime, &config);
-    if (ret != WASM3_SUCCESS) {
-        printk("WASM Service: Failed to initialize WASM3 runtime: %d\n", ret);
+    /* Create WASM3 environment */
+    wasm_env = m3_NewEnvironment();
+    if (!wasm_env) {
+        printk("WASM Service: Failed to create WASM3 environment\n");
         wasm_error_code = WASM_ERROR_LOAD_FAILED;
-        return ret;
+        return -1;
+    }
+    
+    /* Create WASM3 runtime with 8KB stack */
+    wasm_runtime = m3_NewRuntime(wasm_env, 8192, NULL);
+    if (!wasm_runtime) {
+        printk("WASM Service: Failed to create WASM3 runtime\n");
+        m3_FreeEnvironment(wasm_env);
+        wasm_env = NULL;
+        wasm_error_code = WASM_ERROR_LOAD_FAILED;
+        return -1;
     }
     
     wasm_runtime_initialized = true;
-    printk("WASM Service: WASM3 runtime initialized\n");
+    printk("WASM Service: WASM3 runtime initialized successfully\n");
     return 0;
 }
 
@@ -97,24 +114,39 @@ static int load_wasm_module(void)
     /* Validate WASM magic number */
     if (!validate_wasm_magic(wasm_code_buffer, wasm_code_size)) {
         printk("WASM Service: Invalid WASM magic number\n");
+        printk("WASM Service: First 8 bytes: %02x %02x %02x %02x %02x %02x %02x %02x\n",
+               wasm_code_buffer[0], wasm_code_buffer[1], wasm_code_buffer[2], wasm_code_buffer[3],
+               wasm_code_buffer[4], wasm_code_buffer[5], wasm_code_buffer[6], wasm_code_buffer[7]);
         wasm_error_code = WASM_ERROR_INVALID_MAGIC;
         return -1;
     }
     
-    /* Load WASM module */
-    ret = wasm3_load_module(&wasm_runtime, wasm_code_buffer, wasm_code_size);
-    if (ret != WASM3_SUCCESS) {
-        printk("WASM Service: Failed to load WASM module: %d\n", ret);
+    printk("WASM Service: WASM magic validated, size=%u bytes\n", wasm_code_size);
+    
+    /* Parse WASM module using the SAME environment as runtime */
+    M3Result result = m3_ParseModule(wasm_env, &wasm_module, wasm_code_buffer, wasm_code_size);
+    if (result != m3Err_none) {
+        printk("WASM Service: Failed to parse WASM module: %s\n", result);
         wasm_error_code = WASM_ERROR_LOAD_FAILED;
-        return ret;
+        return -1;
+    }
+    
+    /* Load module into runtime */
+    result = m3_LoadModule(wasm_runtime, wasm_module);
+    if (result != m3Err_none) {
+        printk("WASM Service: Failed to load module into runtime: %s\n", result);
+        m3_FreeModule(wasm_module);
+        wasm_module = NULL;
+        wasm_error_code = WASM_ERROR_LOAD_FAILED;
+        return -1;
     }
     
     /* Compile module */
-    ret = wasm3_compile_module(&wasm_runtime);
-    if (ret != WASM3_SUCCESS) {
-        printk("WASM Service: Failed to compile WASM module: %d\n", ret);
+    result = m3_CompileModule(wasm_module);
+    if (result != m3Err_none) {
+        printk("WASM Service: Failed to compile WASM module: %s\n", result);
         wasm_error_code = WASM_ERROR_COMPILE_FAILED;
-        return ret;
+        return -1;
     }
     
     printk("WASM Service: WASM module loaded and compiled successfully (%u bytes)\n", 
@@ -146,17 +178,19 @@ static void reset_upload_state(void)
  * ============================================================================ */
 
 /**
- * @brief Handle WASM upload packets
+ * @brief Handle WASM upload packets with variable length support
  */
-static ssize_t wasm_upload_write(struct bt_conn *conn, const struct bt_gatt_attr *attr,
-                                const void *buf, uint16_t len, uint16_t offset, uint8_t flags)
+static ssize_t wasm_upload_handler(const void *data, uint16_t len)
 {
-    if (len < sizeof(wasm_upload_packet_t)) {
-        printk("WASM Service: Upload packet too small (%d < %zu)\n", len, sizeof(wasm_upload_packet_t));
-        return BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN);
+    printk("\n=== WASM Service: wasm_upload_handler called ===\n");
+    printk("WASM Service: Upload packet received (%d bytes)\n", len);
+    
+    if (len < 8) {  // Minimum packet size: cmd(1) + seq(1) + chunk_size(2) + total_size(4)
+        printk("WASM Service: Upload packet too small (%d < 8)\n", len);
+        return -1;
     }
     
-    const wasm_upload_packet_t *packet = (const wasm_upload_packet_t *)buf;
+    const wasm_upload_packet_t *packet = (const wasm_upload_packet_t *)data;
     
     printk("WASM Service: Upload packet received (cmd: 0x%02x, seq: %d, size: %d)\n",
            packet->cmd, packet->sequence, packet->chunk_size);
@@ -170,7 +204,7 @@ static ssize_t wasm_upload_write(struct bt_conn *conn, const struct bt_gatt_attr
                    packet->total_size, WASM_CODE_BUFFER_SIZE);
             wasm_error_code = WASM_ERROR_BUFFER_OVERFLOW;
             wasm_status = WASM_STATUS_ERROR;
-            return BT_GATT_ERR(BT_ATT_ERR_INSUFFICIENT_RESOURCES);
+            return -1;
         }
         
         reset_upload_state();
@@ -185,7 +219,7 @@ static ssize_t wasm_upload_write(struct bt_conn *conn, const struct bt_gatt_attr
         if (wasm_status != WASM_STATUS_RECEIVING) {
             printk("WASM Service: Not in receiving state\n");
             wasm_error_code = WASM_ERROR_INVALID_PARAMS;
-            return BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN);
+            return -1;
         }
         
         /* Verify sequence number */
@@ -194,7 +228,7 @@ static ssize_t wasm_upload_write(struct bt_conn *conn, const struct bt_gatt_attr
                    wasm_upload_sequence, packet->sequence);
             wasm_error_code = WASM_ERROR_INVALID_PARAMS;
             wasm_status = WASM_STATUS_ERROR;
-            return BT_GATT_ERR(BT_ATT_ERR_INVALID_OFFSET);
+            return -1;
         }
         
         /* Check buffer overflow */
@@ -203,7 +237,7 @@ static ssize_t wasm_upload_write(struct bt_conn *conn, const struct bt_gatt_attr
             printk("WASM Service: Buffer overflow during upload\n");
             wasm_error_code = WASM_ERROR_BUFFER_OVERFLOW;
             wasm_status = WASM_STATUS_ERROR;
-            return BT_GATT_ERR(BT_ATT_ERR_INSUFFICIENT_RESOURCES);
+            return -1;
         }
         
         /* Copy chunk data */
@@ -218,7 +252,14 @@ static ssize_t wasm_upload_write(struct bt_conn *conn, const struct bt_gatt_attr
         if (wasm_bytes_received >= wasm_total_expected) {
             wasm_code_size = wasm_bytes_received;
             wasm_status = WASM_STATUS_RECEIVED;
-            printk("WASM Service: Upload complete, loading module...\n");
+            printk("WASM Service: Upload complete (%u bytes), loading module...\n", wasm_code_size);
+            
+            /* Debug: Print first few bytes of received WASM */
+            printk("WASM Service: First 16 bytes received:");
+            for (int i = 0; i < 16 && i < wasm_code_size; i++) {
+                printk(" %02x", wasm_code_buffer[i]);
+            }
+            printk("\n");
             
             /* Automatically load and compile the module */
             if (load_wasm_module() == 0) {
@@ -243,15 +284,41 @@ static ssize_t wasm_upload_write(struct bt_conn *conn, const struct bt_gatt_attr
         printk("WASM Service: Reset requested\n");
         reset_upload_state();
         if (wasm_runtime_initialized) {
-            wasm3_cleanup(&wasm_runtime);
+            /* Clean up WASM3 structures in correct order */
+            printk("WASM Service: Cleaning up WASM3 runtime...\n");
+            
+            /* First, free the module if it exists */
+            if (wasm_module) {
+                printk("WASM Service: Freeing module...\n");
+                m3_FreeModule(wasm_module);
+                wasm_module = NULL;
+            }
+            
+            /* Then free the runtime (which contains the module) */
+            if (wasm_runtime) {
+                printk("WASM Service: Freeing runtime...\n");
+                m3_FreeRuntime(wasm_runtime);
+                wasm_runtime = NULL;
+            }
+            
+            /* Finally free the environment */
+            if (wasm_env) {
+                printk("WASM Service: Freeing environment...\n");
+                m3_FreeEnvironment(wasm_env);
+                wasm_env = NULL;
+            }
+            
             wasm_runtime_initialized = false;
+            printk("WASM Service: Runtime cleanup complete\n");
+        } else {
+            printk("WASM Service: Runtime not initialized, nothing to clean up\n");
         }
         break;
         
     default:
         printk("WASM Service: Unknown upload command: 0x%02x\n", packet->cmd);
         wasm_error_code = WASM_ERROR_INVALID_PARAMS;
-        return BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN);
+        return -1;
     }
     
     return len;
@@ -260,15 +327,9 @@ static ssize_t wasm_upload_write(struct bt_conn *conn, const struct bt_gatt_attr
 /**
  * @brief Handle WASM execution requests
  */
-static ssize_t wasm_execute_write(struct bt_conn *conn, const struct bt_gatt_attr *attr,
-                                 const void *buf, uint16_t len, uint16_t offset, uint8_t flags)
+static ssize_t wasm_execute_handler(const wasm_execute_packet_t *packet)
 {
-    if (len < sizeof(wasm_execute_packet_t)) {
-        printk("WASM Service: Execute packet too small (%d < %zu)\n", len, sizeof(wasm_execute_packet_t));
-        return BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN);
-    }
-    
-    const wasm_execute_packet_t *packet = (const wasm_execute_packet_t *)buf;
+    printk("\n=== WASM Service: wasm_execute_handler called ===\n");
     
     printk("WASM Service: Execute request for function '%s' with %u args\n",
            packet->function_name, packet->arg_count);
@@ -283,7 +344,7 @@ static ssize_t wasm_execute_write(struct bt_conn *conn, const struct bt_gatt_att
         last_result.status = WASM_STATUS_ERROR;
         last_result.error_code = WASM_ERROR_LOAD_FAILED;
         last_result_valid = true;
-        return len;
+        return sizeof(*packet);
     }
     
     /* Validate function name */
@@ -292,7 +353,7 @@ static ssize_t wasm_execute_write(struct bt_conn *conn, const struct bt_gatt_att
         last_result.status = WASM_STATUS_ERROR;
         last_result.error_code = WASM_ERROR_INVALID_PARAMS;
         last_result_valid = true;
-        return len;
+        return sizeof(*packet);
     }
     
     /* Update status */
@@ -301,10 +362,71 @@ static ssize_t wasm_execute_write(struct bt_conn *conn, const struct bt_gatt_att
     /* Record start time */
     uint32_t start_time = k_uptime_get_32();
     
-    /* Execute function */
+    /* Execute function using direct WASM3 calls */
     int32_t result_value = 0;
-    int ret = wasm3_call_function(&wasm_runtime, packet->function_name, 
-                                 packet->args, packet->arg_count, &result_value);
+    int ret = -1;
+    
+    /* Find function by name */
+    IM3Function function;
+    M3Result find_result = m3_FindFunction(&function, wasm_runtime, packet->function_name);
+    if (find_result != m3Err_none) {
+        printk("WASM Service: Function '%s' not found: %s\n", packet->function_name, find_result);
+        last_result.status = WASM_STATUS_ERROR;
+        last_result.error_code = WASM_ERROR_FUNCTION_NOT_FOUND;
+        last_result_valid = true;
+        wasm_status = WASM_STATUS_LOADED;
+        return sizeof(*packet);
+    }
+    
+    /* Call function with proper argument handling */
+    M3Result call_result;
+    
+    if (packet->arg_count == 0) {
+        /* No arguments - use CallV */
+        printk("WASM Service: Calling function with no arguments\n");
+        call_result = m3_CallV(function);
+    } else if (packet->arg_count <= 4) {
+        /* Function with arguments - use Call with argument pointers */
+        printk("WASM Service: Calling function with %u arguments: ", packet->arg_count);
+        for (uint32_t i = 0; i < packet->arg_count; i++) {
+            printk("%d ", packet->args[i]);
+        }
+        printk("\n");
+        
+        /* Prepare argument pointers for WASM3 */
+        const void* argptrs[4];
+        for (uint32_t i = 0; i < packet->arg_count; i++) {
+            argptrs[i] = &packet->args[i];
+        }
+        
+        call_result = m3_Call(function, packet->arg_count, argptrs);
+    } else {
+        printk("WASM Service: Too many arguments (%u > 4)\n", packet->arg_count);
+        last_result.status = WASM_STATUS_ERROR;
+        last_result.error_code = WASM_ERROR_INVALID_PARAMS;
+        last_result_valid = true;
+        wasm_status = WASM_STATUS_LOADED;
+        return sizeof(*packet);
+    }
+    
+    if (call_result == m3Err_none) {
+        /* Get return value if function returns something */
+        uint32_t returnCount = m3_GetRetCount(function);
+        if (returnCount > 0) {
+            int32_t ret_val;
+            const void* retptrs[1] = { &ret_val };
+            call_result = m3_GetResults(function, 1, retptrs);
+            if (call_result == m3Err_none) {
+                result_value = ret_val;
+                printk("WASM Service: Function returned: %d\n", result_value);
+            } else {
+                printk("WASM Service: Failed to get return value: %s\n", call_result);
+            }
+        }
+        ret = 0; /* Success */
+    } else {
+        printk("WASM Service: Function call failed: %s\n", call_result);
+    }
     
     /* Calculate execution time */
     uint32_t end_time = k_uptime_get_32();
@@ -314,75 +436,71 @@ static ssize_t wasm_execute_write(struct bt_conn *conn, const struct bt_gatt_att
     last_result.return_value = result_value;
     last_result.execution_time_us = execution_time_us;
     
-    if (ret == WASM3_SUCCESS) {
+    if (ret == 0) {
         printk("WASM Service: Function executed successfully, result: %d\n", result_value);
         last_result.status = WASM_STATUS_COMPLETE;
         last_result.error_code = WASM_ERROR_NONE;
         wasm_status = WASM_STATUS_LOADED; /* Ready for next execution */
     } else {
-        printk("WASM Service: Function execution failed: %d\n", ret);
+        printk("WASM Service: Function execution failed\n");
         last_result.status = WASM_STATUS_ERROR;
-        
-        /* Map WASM3 errors to service errors */
-        switch (ret) {
-        case WASM3_ERROR_EXECUTION_FAILED:
-            last_result.error_code = WASM_ERROR_EXECUTION_FAILED;
-            break;
-        default:
-            last_result.error_code = WASM_ERROR_FUNCTION_NOT_FOUND;
-            break;
-        }
-        
+        last_result.error_code = WASM_ERROR_EXECUTION_FAILED;
         wasm_status = WASM_STATUS_LOADED; /* Still loaded, just execution failed */
     }
     
     last_result_valid = true;
-    return len;
+    return sizeof(*packet);
 }
 
 /**
  * @brief Handle WASM status read requests
  */
-static ssize_t wasm_status_read(struct bt_conn *conn, const struct bt_gatt_attr *attr,
-                               void *buf, uint16_t len, uint16_t offset)
+static ssize_t wasm_status_handler(wasm_status_packet_t *response)
 {
-    wasm_status_packet_t status_packet;
-    
+    printk("\n=== WASM Service: wasm_status_handler called ===\n");
     printk("WASM Service: Status read (status: %d, received: %u/%u bytes)\n",
            wasm_status, wasm_bytes_received, wasm_total_expected);
     
-    status_packet.status = wasm_status;
-    status_packet.error_code = wasm_error_code;
-    status_packet.bytes_received = wasm_bytes_received;
-    status_packet.total_size = wasm_total_expected;
-    status_packet.uptime = k_uptime_get() / 1000;
-    memset(status_packet.reserved, 0, sizeof(status_packet.reserved));
+    response->status = wasm_status;
+    response->error_code = wasm_error_code;
+    response->bytes_received = wasm_bytes_received;
+    response->total_size = wasm_total_expected;
+    response->uptime = k_uptime_get() / 1000;
+    memset(response->reserved, 0, sizeof(response->reserved));
     
-    return bt_gatt_attr_read(conn, attr, buf, len, offset, &status_packet, sizeof(status_packet));
+    return sizeof(*response);
 }
 
 /**
  * @brief Handle WASM result read requests
  */
-static ssize_t wasm_result_read(struct bt_conn *conn, const struct bt_gatt_attr *attr,
-                               void *buf, uint16_t len, uint16_t offset)
+static ssize_t wasm_result_handler(wasm_result_packet_t *response)
 {
-    wasm_result_packet_t result_packet;
-    
+    printk("\n=== WASM Service: wasm_result_handler called ===\n");
     printk("WASM Service: Result read request\n");
     
     if (last_result_valid) {
-        result_packet = last_result;
+        *response = last_result;
         printk("WASM Service: Returning result (status: %d, value: %d)\n",
-               result_packet.status, result_packet.return_value);
+               response->status, response->return_value);
     } else {
-        memset(&result_packet, 0, sizeof(result_packet));
-        result_packet.status = WASM_STATUS_IDLE;
-        result_packet.error_code = WASM_ERROR_NONE;
+        memset(response, 0, sizeof(*response));
+        response->status = WASM_STATUS_IDLE;
+        response->error_code = WASM_ERROR_NONE;
     }
     
-    return bt_gatt_attr_read(conn, attr, buf, len, offset, &result_packet, sizeof(result_packet));
+    return sizeof(*response);
 }
+
+/* ============================================================================
+ * BLE WRAPPER GENERATION
+ * ============================================================================ */
+
+/* Generate BLE wrappers automatically */
+BLE_WRITE_WRAPPER_VARIABLE(wasm_upload_handler, 8, 252)  /* Variable length WASM upload packets */
+BLE_WRITE_WRAPPER(wasm_execute_handler, wasm_execute_packet_t)
+BLE_READ_WRAPPER(wasm_status_handler, wasm_status_packet_t)
+BLE_READ_WRAPPER(wasm_result_handler, wasm_result_packet_t)
 
 /* ============================================================================
  * SERVICE DEFINITION
@@ -395,26 +513,26 @@ BT_GATT_SERVICE_DEFINE(wasm_service,
     BT_GATT_CHARACTERISTIC(WASM_UPLOAD_UUID,
                           BT_GATT_CHRC_WRITE | BT_GATT_CHRC_WRITE_WITHOUT_RESP,
                           BT_GATT_PERM_WRITE,
-                          NULL, wasm_upload_write, NULL),
+                          NULL, wasm_upload_handler_ble, NULL),
     
     /* WASM Execute Characteristic - Write for executing functions */
     BT_GATT_CHARACTERISTIC(WASM_EXECUTE_UUID,
                           BT_GATT_CHRC_WRITE,
                           BT_GATT_PERM_WRITE,
-                          NULL, wasm_execute_write, NULL),
+                          NULL, wasm_execute_handler_ble, NULL),
     
     /* WASM Status Characteristic - Read/Notify for status updates */
     BT_GATT_CHARACTERISTIC(WASM_STATUS_UUID,
                           BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY,
                           BT_GATT_PERM_READ,
-                          wasm_status_read, NULL, NULL),
+                          wasm_status_handler_ble, NULL, NULL),
     BT_GATT_CCC(NULL, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
     
     /* WASM Result Characteristic - Read/Notify for execution results */
     BT_GATT_CHARACTERISTIC(WASM_RESULT_UUID,
                           BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY,
                           BT_GATT_PERM_READ,
-                          wasm_result_read, NULL, NULL),
+                          wasm_result_handler_ble, NULL, NULL),
     BT_GATT_CCC(NULL, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
 );
 
@@ -473,7 +591,7 @@ uint16_t wasm_service_get_bytes_received(void)
 
 bool wasm_service_is_ready(void)
 {
-    return (wasm_status == WASM_STATUS_LOADED && wasm_runtime_initialized);
+    return (wasm_status == WASM_STATUS_LOADED && wasm_runtime_initialized && wasm_module != NULL);
 }
 
 void wasm_service_reset(void)
@@ -482,8 +600,21 @@ void wasm_service_reset(void)
     reset_upload_state();
     
     if (wasm_runtime_initialized) {
-        wasm3_cleanup(&wasm_runtime);
+        /* Clean up WASM3 structures */
+        if (wasm_module) {
+            m3_FreeModule(wasm_module);
+            wasm_module = NULL;
+        }
+        if (wasm_runtime) {
+            m3_FreeRuntime(wasm_runtime);
+            wasm_runtime = NULL;
+        }
+        if (wasm_env) {
+            m3_FreeEnvironment(wasm_env);
+            wasm_env = NULL;
+        }
         wasm_runtime_initialized = false;
+        printk("WASM Service: Runtime cleaned up\n");
     }
 }
 
@@ -498,15 +629,51 @@ int wasm_service_execute_function(const char *function_name,
     
     printk("WASM Service: Direct execution of '%s'\n", function_name);
     
-    int ret = wasm3_call_function(&wasm_runtime, function_name, args, arg_count, result);
-    
-    if (ret == WASM3_SUCCESS) {
-        printk("WASM Service: Direct execution successful, result: %d\n", *result);
-        return 0;
-    } else {
-        printk("WASM Service: Direct execution failed: %d\n", ret);
-        return ret;
+    /* Find function by name */
+    IM3Function function;
+    M3Result find_result = m3_FindFunction(&function, wasm_runtime, function_name);
+    if (find_result != m3Err_none) {
+        printk("WASM Service: Function '%s' not found: %s\n", function_name, find_result);
+        return -ENOENT;
     }
+    
+    /* Call function with proper argument handling */
+    M3Result call_result;
+    
+    if (arg_count == 0) {
+        call_result = m3_CallV(function);
+    } else if (arg_count <= 4) {
+        /* Prepare argument pointers */
+        const void* argptrs[4];
+        for (uint32_t i = 0; i < arg_count; i++) {
+            argptrs[i] = &args[i];
+        }
+        call_result = m3_Call(function, arg_count, argptrs);
+    } else {
+        printk("WASM Service: Too many arguments (%u > 4)\n", arg_count);
+        return -EINVAL;
+    }
+    
+    if (call_result != m3Err_none) {
+        printk("WASM Service: Direct execution failed: %s\n", call_result);
+        return -EIO;
+    }
+    
+    /* Get return value if requested */
+    if (result) {
+        uint32_t returnCount = m3_GetRetCount(function);
+        if (returnCount > 0) {
+            int32_t ret_val;
+            const void* retptrs[1] = { &ret_val };
+            call_result = m3_GetResults(function, 1, retptrs);
+            if (call_result == m3Err_none) {
+                *result = ret_val;
+                printk("WASM Service: Direct execution successful, result: %d\n", *result);
+            }
+        }
+    }
+    
+    return 0;
 }
 
 int wasm_service_get_last_result(wasm_result_packet_t *result_packet)

@@ -5,9 +5,7 @@
 #include "data_service.h"
 #include "dfu_service.h"
 #include "sprite_service.h"
-/* Keep WASM disabled for now
 #include "wasm_service.h"
-*/
 #include <zephyr/sys/printk.h>
 #include <zephyr/bluetooth/gatt.h>
 
@@ -81,14 +79,13 @@ int ble_services_init(void)
     }
     printk("BLE Services: ✅ Sprite Service initialized\n");
     
-    /* Initialize WASM Service */
-    /* Temporarily disabled due to BLE macro issues
+    printk("BLE Services: Initializing WASM Service...\n");
     err = wasm_service_init();
     if (err) {
         printk("BLE Services: Failed to initialize WASM Service (err %d)\n", err);
         return err;
     }
-    */
+    printk("BLE Services: ✅ WASM Service initialized\n");
     
     services_initialized = true;
     
@@ -99,7 +96,7 @@ int ble_services_init(void)
         printk("  - Data Service (0xFFF0)\n");
         printk("  - DFU Service (0xFE59)\n");
         printk("  - Sprite Service (0xFFF8)\n");
-        printk("BLE Services: Note - WASM service disabled for now\n");
+        printk("  - WASM Service (0xFFF7)\n");
     
     return 0;
 }
@@ -134,7 +131,7 @@ void ble_services_connection_event(struct bt_conn *conn, bool connected)
     data_service_connection_event(conn, connected);
     dfu_service_connection_event(conn, connected);
     sprite_service_connection_event(conn, connected);
-    /* wasm_service_connection_event(conn, connected); // WASM disabled for now */
+    wasm_service_connection_event(conn, connected);
 }
 
 uint8_t ble_services_get_device_status(void)
