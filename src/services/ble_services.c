@@ -4,6 +4,7 @@
 #include "control_service.h"
 #include "data_service.h"
 #include "dfu_service.h"
+#include "sprite_service.h"
 /* Keep WASM disabled for now
 #include "wasm_service.h"
 */
@@ -72,6 +73,14 @@ int ble_services_init(void)
     }
     printk("BLE Services: ✅ DFU Service initialized\n");
     
+    printk("BLE Services: Initializing Sprite Service...\n");
+    err = sprite_service_init();
+    if (err) {
+        printk("BLE Services: Failed to initialize Sprite Service (err %d)\n", err);
+        return err;
+    }
+    printk("BLE Services: ✅ Sprite Service initialized\n");
+    
     /* Initialize WASM Service */
     /* Temporarily disabled due to BLE macro issues
     err = wasm_service_init();
@@ -84,12 +93,13 @@ int ble_services_init(void)
     services_initialized = true;
     
     printk("BLE Services: All services initialized successfully\n");
-    printk("BLE Services: Available services:\n");
-    printk("  - Device Information Service (0x180A)\n");
-    printk("  - Control Service (0xFFE0)\n");
-    printk("  - Data Service (0xFFF0)\n");
-    printk("  - DFU Service (0xFE59)\n");
-    printk("BLE Services: Note - WASM service disabled for now\n");
+            printk("BLE Services: Available services:\n");
+        printk("  - Device Information Service (0x180A)\n");
+        printk("  - Control Service (0xFFE0)\n");
+        printk("  - Data Service (0xFFF0)\n");
+        printk("  - DFU Service (0xFE59)\n");
+        printk("  - Sprite Service (0xFFF8)\n");
+        printk("BLE Services: Note - WASM service disabled for now\n");
     
     return 0;
 }
@@ -123,6 +133,7 @@ void ble_services_connection_event(struct bt_conn *conn, bool connected)
     control_service_connection_event(conn, connected);
     data_service_connection_event(conn, connected);
     dfu_service_connection_event(conn, connected);
+    sprite_service_connection_event(conn, connected);
     /* wasm_service_connection_event(conn, connected); // WASM disabled for now */
 }
 

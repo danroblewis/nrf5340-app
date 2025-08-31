@@ -21,6 +21,7 @@ target_sources(app PRIVATE
     src/services/control_service.c
     src/services/data_service.c
     src/services/dfu_service.c
+    src/services/sprite_service.c
     # src/services/wasm_service.c  # Keep WASM disabled for now
 )
 
