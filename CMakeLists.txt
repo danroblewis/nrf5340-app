@@ -50,5 +50,9 @@ target_sources(app PRIVATE
 target_compile_definitions(app PRIVATE
     d_m3HasTracer
     d_m3HasWASI
+    d_m3FixedHeap=65536
+    d_m3VerboseErrorMessages=1
+    d_m3LogParse=1
+    d_m3LogModule=1
 )
 

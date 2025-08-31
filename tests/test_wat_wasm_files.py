@@ -5,7 +5,7 @@ Comprehensive tests for all WAT WASM files using wasm_client.py
 
 import asyncio
 import pytest
-from .wasm_client import WASMClient
+from wasm_client import WASMClient
 
 
 async def test_minimal_wat_wasm(ble_client, ble_characteristics, serial_capture):

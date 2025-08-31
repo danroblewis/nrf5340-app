@@ -41,7 +41,7 @@ static const struct bt_uuid_16 wasm_result_uuid = BT_UUID_INIT_16(0xFFF3);
  * ============================================================================ */
 
 /* WASM memory configuration */
-#define WASM_CODE_BUFFER_SIZE       (32 * 1024)    /* 32KB for WASM bytecode */
+#define WASM_CODE_BUFFER_SIZE       (8 * 1024)     /* 8KB for WASM bytecode */
 #define WASM_UPLOAD_CHUNK_SIZE      244             /* BLE packet size - headers */
 #define WASM_FUNCTION_NAME_SIZE     32              /* Maximum function name length */
 #define WASM_RESULT_DATA_SIZE       32              /* Maximum result data size */
@@ -63,11 +63,12 @@ static const struct bt_uuid_16 wasm_result_uuid = BT_UUID_INIT_16(0xFFF3);
 #define WASM_ERROR_NONE                 0x00
 #define WASM_ERROR_BUFFER_OVERFLOW      0x01
 #define WASM_ERROR_INVALID_MAGIC        0x02
-#define WASM_ERROR_LOAD_FAILED          0x03
-#define WASM_ERROR_COMPILE_FAILED       0x04
-#define WASM_ERROR_FUNCTION_NOT_FOUND   0x05
-#define WASM_ERROR_EXECUTION_FAILED     0x06
-#define WASM_ERROR_INVALID_PARAMS       0x07
+#define WASM_ERROR_PARSE_FAILED         0x03
+#define WASM_ERROR_LOAD_FAILED          0x04
+#define WASM_ERROR_COMPILE_FAILED       0x05
+#define WASM_ERROR_FUNCTION_NOT_FOUND   0x06
+#define WASM_ERROR_EXECUTION_FAILED     0x07
+#define WASM_ERROR_INVALID_PARAMS       0x08
 
 /* Upload command codes */
 #define WASM_CMD_START_UPLOAD           0x01

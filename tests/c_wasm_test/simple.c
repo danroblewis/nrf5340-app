@@ -62,9 +62,3 @@ EMSCRIPTEN_KEEPALIVE
 int abs(int n) {
     return (n < 0) ? -n : n;
 }
-
-// Main function required by Emscripten
-int main() {
-    // This function is required but not used
-    return 0;
-}

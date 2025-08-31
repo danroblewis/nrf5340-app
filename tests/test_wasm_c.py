@@ -7,7 +7,7 @@ import asyncio
 import pytest
 import subprocess
 import os
-from .wasm_client import WASMClient
+from wasm_client import WASMClient
 
 
 async def test_c_wasm_example(ble_client, ble_characteristics, serial_capture):

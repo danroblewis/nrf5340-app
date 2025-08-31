@@ -6,7 +6,12 @@
 
 # Compiler and flags
 CC = emcc
-CFLAGS = -O2 -s WASM=1 -s EXPORTED_FUNCTIONS='["_getNumber","_add","_multiply","_subtract","_divide","_max","_min","_isEven","_isOdd","_abs"]' -s EXPORTED_RUNTIME_METHODS='["ccall","cwrap"]' -s ALLOW_MEMORY_GROWTH=1
+CFLAGS = -O2 -s WASM=1 \
+	-s EXPORTED_FUNCTIONS='["_getNumber","_add","_multiply","_subtract","_divide","_max","_min","_isEven","_isOdd","_abs"]' \
+	-s EXPORTED_RUNTIME_METHODS='["ccall","cwrap"]' \
+	-s INITIAL_MEMORY=65536 \
+	-s ALLOW_MEMORY_GROWTH=0 \
+	-s STANDALONE_WASM=1
 
 # Source files
 SOURCES = simple.c
@@ -18,7 +23,7 @@ all: $(TARGET)
 # Build WASM file
 $(TARGET): $(SOURCES)
 	@echo "🔨 Building C WASM: $@"
-	$(CC) $(CFLAGS) $(SOURCES) -o $@
+	$(CC) $(CFLAGS) $(SOURCES) -o $@ --no-entry
 	@echo "✅ Built: $@"
 	@echo "📏 File size: $(shell wc -c < $@) bytes"
 
