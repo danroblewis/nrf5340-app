@@ -33,21 +33,14 @@ def test_mtu_negotiated(ble_client):
     
     assert mtu >= 23  # Minimum BLE MTU
     assert mtu <= 517  # Maximum BLE MTU
-    
-    # Common negotiated sizes
-    common_mtus = [23, 185, 247, 517]
-    if mtu not in common_mtus:
-        # Allow for device-specific negotiated values
-        assert mtu > 23
 
 
 @pytest.mark.asyncio
-async def test_small_packet_transfer(ble_client, ble_services, serial_capture):
+async def test_small_packet_transfer(ble_client, ble_services, ble_characteristics, serial_capture):
     """Test small packet transfer (well under MTU)"""
-    services, characteristics = ble_services
     
-    upload_char = characteristics[DATA_UPLOAD_UUID]
-    download_char = characteristics[DATA_DOWNLOAD_UUID]
+    upload_char = ble_characteristics[DATA_UPLOAD_UUID]
+    download_char = ble_characteristics[DATA_DOWNLOAD_UUID]
     
     test_data = b"Small packet test"
     
@@ -60,12 +53,11 @@ async def test_small_packet_transfer(ble_client, ble_services, serial_capture):
 
 
 @pytest.mark.asyncio
-async def test_medium_packet_transfer(ble_client, ble_services, serial_capture):
+async def test_medium_packet_transfer(ble_client, ble_services, ble_characteristics, serial_capture):
     """Test medium packet transfer"""
-    services, characteristics = ble_services
     
-    upload_char = characteristics[DATA_UPLOAD_UUID]
-    download_char = characteristics[DATA_DOWNLOAD_UUID]
+    upload_char = ble_characteristics[DATA_UPLOAD_UUID]
+    download_char = ble_characteristics[DATA_DOWNLOAD_UUID]
     
     test_data = b"M" * 100
     
@@ -78,12 +70,11 @@ async def test_medium_packet_transfer(ble_client, ble_services, serial_capture):
 
 
 @pytest.mark.asyncio
-async def test_large_packet_transfer(ble_client, ble_services, serial_capture):
+async def test_large_packet_transfer(ble_client, ble_services, ble_characteristics, serial_capture):
     """Test large packet transfer (near MTU size)"""
-    services, characteristics = ble_services
     
-    upload_char = characteristics[DATA_UPLOAD_UUID]
-    download_char = characteristics[DATA_DOWNLOAD_UUID]
+    upload_char = ble_characteristics[DATA_UPLOAD_UUID]
+    download_char = ble_characteristics[DATA_DOWNLOAD_UUID]
     
     # Use MTU - 3 (for ATT header overhead)
     mtu = ble_client.mtu_size
@@ -99,29 +90,22 @@ async def test_large_packet_transfer(ble_client, ble_services, serial_capture):
     assert verify_test_data(received_data, len(test_data))
 
 
+@pytest.mark.parametrize("text_size", [16, 32, 64, 128, 200, 244])
 @pytest.mark.asyncio
-async def test_various_packet_sizes(ble_client, ble_services, serial_capture):
+async def test_various_packet_sizes(ble_client, ble_services, ble_characteristics, serial_capture, text_size):
     """Test various packet sizes up to MTU"""
-    services, characteristics = ble_services
     
-    upload_char = characteristics[DATA_UPLOAD_UUID]
-    download_char = characteristics[DATA_DOWNLOAD_UUID]
-    
-    mtu = ble_client.mtu_size
-    max_payload = min(mtu - 3, 244)
-    
-    test_sizes = [1, 10, 20, 50, 100, max_payload]
+    upload_char = ble_characteristics[DATA_UPLOAD_UUID]
+    download_char = ble_characteristics[DATA_DOWNLOAD_UUID]
     
     with serial_capture:
-        for size in test_sizes:
-            if size <= max_payload:
-                test_data = bytes([size % 256] * size)
-                
-                await ble_client.write_gatt_char(upload_char, test_data)
-                await asyncio.sleep(0.05)
-                
-                received_data = await ble_client.read_gatt_char(download_char)
-                assert verify_test_data(received_data, len(test_data))
+        test_data = bytes([text_size % 256] * text_size)
+        
+        await ble_client.write_gatt_char(upload_char, test_data)
+        await asyncio.sleep(0.05)
+        
+        received_data = await ble_client.read_gatt_char(download_char)
+        assert verify_test_data(received_data, len(test_data))
 
 
 @pytest.mark.asyncio
@@ -138,12 +122,11 @@ async def test_mtu_size_consistency(ble_client):
 
 
 @pytest.mark.asyncio
-async def test_rapid_packet_transfers(ble_client, ble_services, serial_capture):
+async def test_rapid_packet_transfers(ble_client, ble_services, ble_characteristics, serial_capture):
     """Test rapid succession of packet transfers"""
-    services, characteristics = ble_services
     
-    upload_char = characteristics[DATA_UPLOAD_UUID]
-    download_char = characteristics[DATA_DOWNLOAD_UUID]
+    upload_char = ble_characteristics[DATA_UPLOAD_UUID]
+    download_char = ble_characteristics[DATA_DOWNLOAD_UUID]
     
     test_data = b"Rapid test packet"
     
@@ -162,10 +145,9 @@ async def test_rapid_packet_transfers(ble_client, ble_services, serial_capture):
     assert verify_test_data(received_data, len(test_data))
 
 
-def test_data_service_available(ble_services):
+def test_data_service_available(ble_services, ble_characteristics):
     """Test that data service required for MTU tests is available"""
-    services, characteristics = ble_services
     
-    assert DATA_SERVICE_UUID in services
-    assert DATA_UPLOAD_UUID in characteristics  
-    assert DATA_DOWNLOAD_UUID in characteristics
+    assert DATA_SERVICE_UUID in ble_services
+    assert DATA_UPLOAD_UUID in ble_characteristics  
+    assert DATA_DOWNLOAD_UUID in ble_characteristics

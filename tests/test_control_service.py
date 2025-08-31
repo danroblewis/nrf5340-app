@@ -17,32 +17,29 @@ CONTROL_COMMAND_UUID = "0000ffe1-0000-1000-8000-00805f9b34fb"
 CONTROL_RESPONSE_UUID = "0000ffe2-0000-1000-8000-00805f9b34fb"
 
 
-def test_control_service_exists(ble_services):
+def test_control_service_exists(ble_services, ble_characteristics):
     """Test that Control Service is discovered"""
-    services, characteristics = ble_services
-    assert CONTROL_SERVICE_UUID in services
+    assert CONTROL_SERVICE_UUID in ble_services
 
 
-def test_control_service_characteristics(ble_services):
+def test_control_service_characteristics(ble_services, ble_characteristics):
     """Test that control service characteristics are present"""
-    services, characteristics = ble_services
     
     # Command characteristic should exist
-    assert CONTROL_COMMAND_UUID in characteristics
+    assert CONTROL_COMMAND_UUID in ble_characteristics
     
     # Response characteristic may or may not exist depending on implementation
-    # assert CONTROL_RESPONSE_UUID in characteristics
+    # assert CONTROL_RESPONSE_UUID in ble_characteristics
 
 
 @pytest.mark.asyncio
-async def test_control_service_ping(ble_client, ble_services, serial_capture):
+async def test_control_service_ping(ble_client, ble_services, ble_characteristics, serial_capture):
     """Test control service ping command"""
-    services, characteristics = ble_services
     
-    assert CONTROL_SERVICE_UUID in services
-    assert CONTROL_COMMAND_UUID in characteristics
+    assert CONTROL_SERVICE_UUID in ble_services
+    assert CONTROL_COMMAND_UUID in ble_characteristics
     
-    command_char = characteristics[CONTROL_COMMAND_UUID]
+    command_char = ble_characteristics[CONTROL_COMMAND_UUID]
     
     with serial_capture:
         # Send GET_STATUS command using correct 20-byte packet format
@@ -53,14 +50,13 @@ async def test_control_service_ping(ble_client, ble_services, serial_capture):
 
 
 @pytest.mark.asyncio
-async def test_control_service_commands(ble_client, ble_services, serial_capture):
+async def test_control_service_commands(ble_client, ble_services, ble_characteristics, serial_capture):
     """Test various control service commands"""
-    services, characteristics = ble_services
     
-    assert CONTROL_SERVICE_UUID in services
-    assert CONTROL_COMMAND_UUID in characteristics
+    assert CONTROL_SERVICE_UUID in ble_services
+    assert CONTROL_COMMAND_UUID in ble_characteristics
     
-    command_char = characteristics[CONTROL_COMMAND_UUID]
+    command_char = ble_characteristics[CONTROL_COMMAND_UUID]
     
     # Test different control commands using correct 20-byte packet format
     test_commands = [

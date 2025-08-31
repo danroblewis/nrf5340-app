@@ -15,40 +15,32 @@ DFU_CONTROL_POINT_UUID = "8ec90001-f315-4f60-9fb8-838830daea50"
 DFU_PACKET_UUID = "8ec90002-f315-4f60-9fb8-838830daea50"
 
 
-def test_dfu_service_exists(ble_services):
+def test_dfu_service_exists(ble_services, ble_characteristics):
     """Test that DFU Service is discovered"""
-    services, characteristics = ble_services
-    assert DFU_SERVICE_UUID in services
+    assert DFU_SERVICE_UUID in ble_services
 
 
-def test_dfu_service_characteristics(ble_services):
+def test_dfu_service_characteristics(ble_services, ble_characteristics):
     """Test DFU service characteristics"""
-    services, characteristics = ble_services
     
-    assert DFU_SERVICE_UUID in services
+    assert DFU_SERVICE_UUID in ble_services
     
     # Note: DFU characteristics may vary by implementation
     # The serial log shows this is a "mock implementation"
     # so we'll just verify the service exists and has some characteristics
     
-    # Find characteristics associated with the DFU service
-    dfu_service = None
-    for uuid, service in ble_services[0].items():
-        if uuid == DFU_SERVICE_UUID:
-            dfu_service = service
-            break
-    
+    # Verify DFU service exists 
+    dfu_service = ble_services[DFU_SERVICE_UUID]
     assert dfu_service is not None
     # Mock implementation may have different characteristics
     # assert len(dfu_service.characteristics) > 0
 
 
 @pytest.mark.slow
-def test_dfu_service_mock_implementation(ble_services):
+def test_dfu_service_mock_implementation(ble_services, ble_characteristics):
     """Test that DFU service is present but may be mock implementation"""
-    services, characteristics = ble_services
     
-    assert DFU_SERVICE_UUID in services
+    assert DFU_SERVICE_UUID in ble_services
     
     # Verify service was properly initialized
     # From serial log: "DFU Service: Initialized (mock implementation)"
@@ -56,11 +48,10 @@ def test_dfu_service_mock_implementation(ble_services):
 
 
 @pytest.mark.asyncio
-async def test_dfu_service_read_only_access(ble_client, ble_services):
+async def test_dfu_service_read_only_access(ble_client, ble_services, ble_characteristics):
     """Test basic DFU service access without triggering updates"""
-    services, characteristics = ble_services
     
-    assert DFU_SERVICE_UUID in services
+    assert DFU_SERVICE_UUID in ble_services
     
     # We won't attempt to write to DFU characteristics as that could
     # trigger firmware update processes. This test just verifies

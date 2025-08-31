@@ -207,8 +207,13 @@ def ble_client(ble_setup):
 
 @pytest.fixture  
 def ble_services(ble_setup):
-    """Get BLE services and characteristics"""
-    return ble_setup['services'], ble_setup['characteristics']
+    """Get BLE services dictionary"""
+    return ble_setup['services']
+
+@pytest.fixture
+def ble_characteristics(ble_setup):
+    """Get BLE characteristics dictionary"""
+    return ble_setup['characteristics']
 
 @pytest.fixture
 def serial_capture():

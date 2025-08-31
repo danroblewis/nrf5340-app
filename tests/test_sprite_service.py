@@ -20,15 +20,13 @@ SPRITE_VERIFY_REQ_UUID = "0000fffd-0000-1000-8000-00805f9b34fb"
 SPRITE_VERIFY_RESP_UUID = "0000fffe-0000-1000-8000-00805f9b34fb"
 
 
-def test_sprite_service_exists(ble_services):
+def test_sprite_service_exists(ble_services, ble_characteristics):
     """Test sprite service is discovered"""
-    services, characteristics = ble_services
-    assert SPRITE_SERVICE_UUID in services
+    assert SPRITE_SERVICE_UUID in ble_services
 
 
-def test_sprite_characteristics(ble_services):
+def test_sprite_characteristics(ble_services, ble_characteristics):
     """Test all sprite characteristics are present"""
-    services, characteristics = ble_services
     
     required_chars = [
         SPRITE_UPLOAD_UUID,
@@ -40,15 +38,14 @@ def test_sprite_characteristics(ble_services):
     ]
     
     for char_uuid in required_chars:
-        assert char_uuid in characteristics
+        assert char_uuid in ble_characteristics
 
 
 @pytest.mark.asyncio
-async def test_sprite_registry_read(ble_client, ble_services):
+async def test_sprite_registry_read(ble_client, ble_services, ble_characteristics):
     """Test reading sprite registry status"""
-    services, characteristics = ble_services
     
-    registry_char = characteristics[SPRITE_REGISTRY_UUID]
+    registry_char = ble_characteristics[SPRITE_REGISTRY_UUID]
     registry_data = await ble_client.read_gatt_char(registry_char)
     
     # Registry format: count(2) + max_sprites(2) + sprite_size(2) + data...
@@ -62,23 +59,22 @@ async def test_sprite_registry_read(ble_client, ble_services):
 
 
 @pytest.mark.asyncio
-async def test_sprite_operations_may_not_work(ble_client, ble_services):
+async def test_sprite_operations_may_not_work(ble_client, ble_services, ble_characteristics):
     """Test that sprite operations are present but may not be implemented"""
-    services, characteristics = ble_services
     
     # Test upload characteristic exists
-    upload_char = characteristics[SPRITE_UPLOAD_UUID]
+    upload_char = ble_characteristics[SPRITE_UPLOAD_UUID]
     assert upload_char is not None
     
     # Test download characteristics exist
-    download_req_char = characteristics[SPRITE_DOWNLOAD_REQ_UUID]
-    download_resp_char = characteristics[SPRITE_DOWNLOAD_RESP_UUID]
+    download_req_char = ble_characteristics[SPRITE_DOWNLOAD_REQ_UUID]
+    download_resp_char = ble_characteristics[SPRITE_DOWNLOAD_RESP_UUID]
     assert download_req_char is not None
     assert download_resp_char is not None
     
     # Test verify characteristics exist
-    verify_req_char = characteristics[SPRITE_VERIFY_REQ_UUID]
-    verify_resp_char = characteristics[SPRITE_VERIFY_RESP_UUID]
+    verify_req_char = ble_characteristics[SPRITE_VERIFY_REQ_UUID]
+    verify_resp_char = ble_characteristics[SPRITE_VERIFY_RESP_UUID]
     assert verify_req_char is not None
     assert verify_resp_char is not None
     
