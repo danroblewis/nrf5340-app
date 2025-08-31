@@ -29,10 +29,8 @@ def verify_test_data(data, expected_size):
 
 def test_mtu_negotiated(ble_client):
     """Test that MTU was negotiated to a reasonable size"""
-    mtu = ble_client.mtu_size
-    
-    assert mtu >= 23  # Minimum BLE MTU
-    assert mtu <= 517  # Maximum BLE MTU
+    assert ble_client.mtu_size >= 23  # Minimum BLE MTU
+    assert ble_client.mtu_size <= 517  # Maximum BLE MTU
 
 
 @pytest.mark.asyncio
