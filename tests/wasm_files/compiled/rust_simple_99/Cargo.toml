@@ -1,0 +1,19 @@
+[package]
+name = "rust_simple_99"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[profile.release]
+opt-level = 'z'  # Optimize for size
+lto = true
+codegen-units = 1
+panic = 'abort'
+strip = true  # Strip symbols
+overflow-checks = false  # Disable overflow checks
+debug = false  # No debug info
+
+[dependencies]
+# No dependencies for minimal size

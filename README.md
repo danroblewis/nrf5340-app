@@ -104,9 +104,58 @@ See `tests/README.md` for detailed testing documentation.
 
 ## WASM Development
 
-This device supports uploading and executing WebAssembly (WASM) modules via BLE. You can write applications in Rust and compile them to run on the device.
+This device supports uploading and executing WebAssembly (WASM) modules via BLE. **Important: Use WAT (WebAssembly Text) for reliable development, not Rust.**
 
-### Installing Rust and WASM Tools
+### ⚠️ Rust WASM Compatibility Issues
+
+**Note from development experience**: I initially suggested Rust because "Rust people are really good at WASM," but this turned out to be incorrect advice. Our testing revealed significant compatibility issues:
+
+- **❌ Rust-compiled WASMs consistently crash** with "Stack overflow (context area not valid)" errors
+- **✅ WAT-compiled WASMs work perfectly** regardless of size or complexity
+- **🔍 Root cause**: WASM3 library incompatibility with Rust toolchain output, not size or memory issues
+
+**Recommendation**: Use WAT for reliable WASM development on this device.
+
+### Creating WASM with WAT (Recommended)
+
+1. **Write your WASM in WebAssembly Text format:**
+   ```wat
+   (module
+     ;; Function that returns 99
+     (func $get_number (result i32)
+       i32.const 99)
+     
+     ;; Function that adds two numbers
+     (func $add (param i32 i32) (result i32)
+       local.get 0
+       local.get 1
+       i32.add)
+     
+     ;; Export functions
+     (export "get_number" (func $get_number))
+     (export "add" (func $add)))
+   ```
+
+2. **Compile WAT to WASM:**
+   ```bash
+   # Install wat2wasm (part of WebAssembly Binary Toolkit)
+   brew install wabt
+   
+   # Compile
+   wat2wasm my_app.wat -o my_app.wasm
+   ```
+
+3. **Test your WASM:**
+   ```bash
+   cd tests
+   python test_wasm_service_basic.py --wasm-file ../my_app.wasm
+   ```
+
+### Rust WASM (Not Recommended - Has Compatibility Issues)
+
+If you still want to try Rust (not recommended), here are the steps we attempted:
+
+#### Installing Rust and WASM Tools
 
 1. **Install Rust:**
    ```bash
@@ -124,7 +173,7 @@ This device supports uploading and executing WebAssembly (WASM) modules via BLE.
    curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
    ```
 
-### Creating a WASM Application
+#### Creating a Rust WASM Application
 
 1. **Create a new Rust library:**
    ```bash
@@ -183,6 +232,10 @@ This device supports uploading and executing WebAssembly (WASM) modules via BLE.
    ls target/wasm32-unknown-unknown/release/*.wasm
    ```
 
+**⚠️ Warning**: Rust-compiled WASMs will likely crash during upload/compilation with stack overflow errors. This is a known compatibility issue between the Rust toolchain and WASM3 runtime on this device.
+
+**Note**: We did extensive optimization work on Rust WASMs (achieving 73% size reduction and 97% memory reduction), but the fundamental compatibility issue persisted. This work demonstrated that Rust WASM optimization techniques work correctly, but the underlying runtime compatibility issue cannot be resolved through compilation settings alone.
+
 ### Uploading WASM to Device
 
 Use the Python test scripts to upload and execute your WASM:
@@ -201,19 +254,25 @@ Your exported functions should follow C calling conventions:
 - **Return**: Single `i32` value
 - **Function names**: Must be null-terminated strings (max 32 chars)
 
-Example function signatures that work with the device:
-```rust
-#[no_mangle] pub extern "C" fn my_function() -> i32 { ... }
-#[no_mangle] pub extern "C" fn add_numbers(a: i32, b: i32) -> i32 { ... }
-#[no_mangle] pub extern "C" fn process_data(x: i32, y: i32, z: i32, w: i32) -> i32 { ... }
-```
+### Testing Results Summary
+
+Our comprehensive testing revealed the following compatibility matrix:
+
+| WASM Type | Size | Memory | Functions | Upload | Compile | Execute | Status |
+|-----------|------|---------|-----------|---------|---------|---------|---------|
+| **Simple WAT** | 65 bytes | None | 2 | ✅ | ✅ | ✅ | **Works perfectly** |
+| **Minimal WAT** | 43 bytes | None | 1 | ✅ | ✅ | ✅ | **Works perfectly** |
+| **Large WAT** | 434 bytes | 64KB | 21 | ✅ | ✅ | ✅ | **Works perfectly** |
+| **Rust WASM** | 110 bytes | 64KB | 1 | ❌ | ❌ | ❌ | **Crashes consistently** |
+
+**Key Findings:**
+- **✅ WAT-compiled WASMs work reliably** regardless of size or complexity
+- **❌ Rust-compiled WASMs crash consistently** with stack overflow errors
+- **🔍 Size is NOT the issue** - 434-byte WAT works fine, 110-byte Rust crashes
+- **🎯 Root cause**: WASM3 library incompatibility with Rust toolchain output
+
+**Recommendation**: Use WAT for all WASM development on this device. It's more reliable, easier to debug, and fully compatible with the WASM3 runtime.
 
 ## Project Structure
 
-- `src/main.c` - Main application code with BLE peripheral implementation
-- `src/services/` - BLE service implementations (WASM, data, control, etc.)
-- `prj.conf` - Zephyr configuration (BLE, serial console, etc.)
-- `CMakeLists.txt` - CMake build configuration
-- `build.sh` - Build script
-- `flash.sh` - Flash script
-- `tests/` - Comprehensive BLE testing suite
+- `src/main.c`

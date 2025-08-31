@@ -1,0 +1,19 @@
+[target.wasm32-unknown-unknown]
+rustflags = [
+  # set a SMALL stack
+  "-Clink-arg=-z", "-Clink-arg=stack-size=8192",  # 8 KiB
+
+  # keep stack at the start (helps keep total memory small/predictable)
+  "-Clink-arg=--stack-first",
+
+  # force 64 KiB linear memory (1 page)
+  "-Clink-arg=--initial-memory=65536",
+  "-Clink-arg=--max-memory=65536",
+
+  # size hygiene
+  "-Clink-arg=--gc-sections",
+  "-Clink-arg=--strip-all",
+
+  # only if you’re building a cdylib (no program entry)
+  "-Clink-arg=--no-entry",
+]

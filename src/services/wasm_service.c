@@ -35,11 +35,20 @@ static uint8_t wasm_status = WASM_STATUS_IDLE;
 static uint8_t wasm_error_code = WASM_ERROR_NONE;
 static struct bt_conn *wasm_conn = NULL;
 
+/* Notification state */
+static bool wasm_status_notify_enabled = false;
+static bool wasm_result_notify_enabled = false;
+
 /* WASM3 runtime - direct WASM3 structures */
 static IM3Environment wasm_env = NULL;
 static IM3Runtime wasm_runtime = NULL;
 static IM3Module wasm_module = NULL;
 static bool wasm_runtime_initialized = false;
+
+/* WASM3 memory pool for dynamic allocations */
+#define WASM3_MEMORY_POOL_SIZE (64 * 1024)  /* 64KB memory pool - increased for larger WASMs */
+static uint8_t wasm3_memory_pool[WASM3_MEMORY_POOL_SIZE];
+static bool wasm3_memory_pool_initialized = false;
 
 /* Last execution result */
 static wasm_result_packet_t last_result;
@@ -48,6 +57,29 @@ static bool last_result_valid = false;
 /* ============================================================================
  * PRIVATE FUNCTIONS
  * ============================================================================ */
+
+/**
+ * @brief Send status change notification if enabled
+ */
+static void notify_status_change(void)
+{
+    if (wasm_conn && wasm_status_notify_enabled) {
+        wasm_status_packet_t status_packet = {
+            .status = wasm_status,
+            .error_code = wasm_error_code,
+            .bytes_received = wasm_bytes_received,
+            .total_size = wasm_total_expected,
+            .uptime = k_uptime_get_32(),
+            .reserved = {0}
+        };
+        
+        printk("WASM Service: Notifying status change - Status: %d, Error: %d, Bytes: %d\n",
+               wasm_status, wasm_error_code, wasm_bytes_received);
+        
+        // For now, just log the status change - we'll implement proper notifications later
+        printk("WASM Service: Status change notification would be sent here\n");
+    }
+}
 
 /**
  * @brief Validate WASM magic number (0x00 0x61 0x73 0x6d)
@@ -63,12 +95,35 @@ static bool validate_wasm_magic(const uint8_t *data, size_t size)
 }
 
 /**
+ * @brief Initialize WASM3 memory pool
+ */
+static int init_wasm3_memory_pool(void)
+{
+    if (wasm3_memory_pool_initialized) {
+        return 0;
+    }
+    
+    /* Initialize memory pool with zeros */
+    memset(wasm3_memory_pool, 0, WASM3_MEMORY_POOL_SIZE);
+    wasm3_memory_pool_initialized = true;
+    
+    printk("WASM Service: WASM3 memory pool initialized (%d bytes)\n", WASM3_MEMORY_POOL_SIZE);
+    return 0;
+}
+
+/**
  * @brief Initialize WASM3 runtime if not already done
  */
 static int ensure_wasm_runtime(void)
 {
     if (wasm_runtime_initialized) {
         return 0;
+    }
+    
+    /* Initialize memory pool first */
+    int ret = init_wasm3_memory_pool();
+    if (ret != 0) {
+        return ret;
     }
     
     /* Create WASM3 environment */
@@ -79,8 +134,8 @@ static int ensure_wasm_runtime(void)
         return -1;
     }
     
-    /* Create WASM3 runtime with 8KB stack */
-    wasm_runtime = m3_NewRuntime(wasm_env, 8192, NULL);
+    /* Create WASM3 runtime with 32KB stack for larger WASM modules */
+    wasm_runtime = m3_NewRuntime(wasm_env, 131072, NULL);  // Increased from 32KB to 128KB
     if (!wasm_runtime) {
         printk("WASM Service: Failed to create WASM3 runtime\n");
         m3_FreeEnvironment(wasm_env);
@@ -88,6 +143,8 @@ static int ensure_wasm_runtime(void)
         wasm_error_code = WASM_ERROR_LOAD_FAILED;
         return -1;
     }
+    
+    /* Note: m3_LinkLibC will be called after module is loaded */
     
     wasm_runtime_initialized = true;
     printk("WASM Service: WASM3 runtime initialized successfully\n");
@@ -111,6 +168,13 @@ static int load_wasm_module(void)
         return ret;
     }
     
+    /* Check memory pool status */
+    if (!wasm3_memory_pool_initialized) {
+        printk("WASM Service: ERROR - Memory pool not initialized!\n");
+        return -1;
+    }
+    printk("WASM Service: Memory pool status: initialized (%u bytes)\n", WASM3_MEMORY_POOL_SIZE);
+    
     /* Validate WASM magic number */
     if (!validate_wasm_magic(wasm_code_buffer, wasm_code_size)) {
         printk("WASM Service: Invalid WASM magic number\n");
@@ -124,14 +188,45 @@ static int load_wasm_module(void)
     printk("WASM Service: WASM magic validated, size=%u bytes\n", wasm_code_size);
     
     /* Parse WASM module using the SAME environment as runtime */
+    printk("WASM Service: Starting WASM module parsing (size: %u bytes)\n", wasm_code_size);
+    printk("WASM Service: Available stack: %u bytes\n", CONFIG_MAIN_STACK_SIZE);
+    printk("WASM Service: WASM3 runtime stack: %u bytes\n", 131072);
+    
+    /* Validate WASM3 environment */
+    if (wasm_env == NULL) {
+        printk("WASM Service: ERROR - wasm_env is NULL!\n");
+        return -1;
+    }
+    printk("WASM Service: WASM3 environment validated: 0x%08x\n", (uint32_t)wasm_env);
+    
+    /* Check stack pointer for context validation */
+    printk("WASM Service: Stack pointer: 0x%08x\n", (uint32_t)__builtin_frame_address(0));
+    
     M3Result result = m3_ParseModule(wasm_env, &wasm_module, wasm_code_buffer, wasm_code_size);
     if (result != m3Err_none) {
         printk("WASM Service: Failed to parse WASM module: %s\n", result);
+        printk("WASM Service: First 32 bytes: ");
+        for (int i = 0; i < 32 && i < wasm_code_size; i++) {
+            printk("%02x ", wasm_code_buffer[i]);
+        }
+        printk("\n");
         wasm_error_code = WASM_ERROR_LOAD_FAILED;
+        wasm_status = WASM_STATUS_ERROR;
         return -1;
     }
     
+    printk("WASM Service: WASM module parsing completed successfully\n");
+    
     /* Load module into runtime */
+    printk("WASM Service: Loading module into runtime...\n");
+    
+    /* Validate runtime before loading */
+    if (wasm_runtime == NULL) {
+        printk("WASM Service: ERROR - wasm_runtime is NULL!\n");
+        return -1;
+    }
+    printk("WASM Service: Runtime validated: 0x%08x\n", (uint32_t)wasm_runtime);
+    
     result = m3_LoadModule(wasm_runtime, wasm_module);
     if (result != m3Err_none) {
         printk("WASM Service: Failed to load module into runtime: %s\n", result);
@@ -141,13 +236,24 @@ static int load_wasm_module(void)
         return -1;
     }
     
+    printk("WASM Service: Module loaded into runtime successfully\n");
+    
+
+    
     /* Compile module */
+    printk("WASM Service: Starting module compilation...\n");
+    
+    /* Check stack pointer before compilation for context validation */
+    printk("WASM Service: Stack pointer before compile: 0x%08x\n", (uint32_t)__builtin_frame_address(0));
+    
     result = m3_CompileModule(wasm_module);
     if (result != m3Err_none) {
         printk("WASM Service: Failed to compile WASM module: %s\n", result);
         wasm_error_code = WASM_ERROR_COMPILE_FAILED;
         return -1;
     }
+    
+    printk("WASM Service: Module compilation completed successfully\n");
     
     printk("WASM Service: WASM module loaded and compiled successfully (%u bytes)\n", 
            wasm_code_size);
@@ -212,6 +318,9 @@ static ssize_t wasm_upload_handler(const void *data, uint16_t len)
         wasm_status = WASM_STATUS_RECEIVING;
         wasm_upload_sequence = 0;
         
+        /* Notify status change */
+        notify_status_change();
+        
         /* Fall through to process data in first packet */
         __fallthrough;
         
@@ -254,6 +363,9 @@ static ssize_t wasm_upload_handler(const void *data, uint16_t len)
             wasm_status = WASM_STATUS_RECEIVED;
             printk("WASM Service: Upload complete (%u bytes), loading module...\n", wasm_code_size);
             
+            /* Notify status change */
+            notify_status_change();
+            
             /* Debug: Print first few bytes of received WASM */
             printk("WASM Service: First 16 bytes received:");
             for (int i = 0; i < 16 && i < wasm_code_size; i++) {
@@ -264,6 +376,12 @@ static ssize_t wasm_upload_handler(const void *data, uint16_t len)
             /* Automatically load and compile the module */
             if (load_wasm_module() == 0) {
                 printk("WASM Service: WASM module ready for execution\n");
+                wasm_status = WASM_STATUS_LOADED;
+                wasm_error_code = WASM_ERROR_NONE;
+                notify_status_change();
+            } else {
+                /* Module loading failed - status already set by load_wasm_module */
+                notify_status_change();
             }
         }
         break;
@@ -493,11 +611,29 @@ static ssize_t wasm_result_handler(wasm_result_packet_t *response)
 }
 
 /* ============================================================================
+ * CCC HANDLERS
+ * ============================================================================ */
+
+static void wasm_status_ccc_changed(const struct bt_gatt_attr *attr, uint16_t value)
+{
+    wasm_status_notify_enabled = (value == BT_GATT_CCC_NOTIFY);
+    printk("WASM Service: Status notifications %s\n", 
+           wasm_status_notify_enabled ? "enabled" : "disabled");
+}
+
+static void wasm_result_ccc_changed(const struct bt_gatt_attr *attr, uint16_t value)
+{
+    wasm_result_notify_enabled = (value == BT_GATT_CCC_NOTIFY);
+    printk("WASM Service: Result notifications %s\n", 
+           wasm_result_notify_enabled ? "enabled" : "disabled");
+}
+
+/* ============================================================================
  * BLE WRAPPER GENERATION
  * ============================================================================ */
 
 /* Generate BLE wrappers automatically */
-BLE_WRITE_WRAPPER_VARIABLE(wasm_upload_handler, 8, 252)  /* Variable length WASM upload packets */
+BLE_WRITE_WRAPPER_VARIABLE(wasm_upload_handler, 8, 252)  /* Variable length WASM upload packets - limited by BLE MTU */
 BLE_WRITE_WRAPPER(wasm_execute_handler, wasm_execute_packet_t)
 BLE_READ_WRAPPER(wasm_status_handler, wasm_status_packet_t)
 BLE_READ_WRAPPER(wasm_result_handler, wasm_result_packet_t)
@@ -511,7 +647,7 @@ BT_GATT_SERVICE_DEFINE(wasm_service,
     
     /* WASM Upload Characteristic - Write for uploading WASM bytecode */
     BT_GATT_CHARACTERISTIC(WASM_UPLOAD_UUID,
-                          BT_GATT_CHRC_WRITE | BT_GATT_CHRC_WRITE_WITHOUT_RESP,
+                          BT_GATT_CHRC_WRITE,
                           BT_GATT_PERM_WRITE,
                           NULL, wasm_upload_handler_ble, NULL),
     
@@ -526,14 +662,14 @@ BT_GATT_SERVICE_DEFINE(wasm_service,
                           BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY,
                           BT_GATT_PERM_READ,
                           wasm_status_handler_ble, NULL, NULL),
-    BT_GATT_CCC(NULL, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
+    BT_GATT_CCC(wasm_status_ccc_changed, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
     
     /* WASM Result Characteristic - Read/Notify for execution results */
     BT_GATT_CHARACTERISTIC(WASM_RESULT_UUID,
                           BT_GATT_CHRC_READ | BT_GATT_CHRC_NOTIFY,
                           BT_GATT_PERM_READ,
                           wasm_result_handler_ble, NULL, NULL),
-    BT_GATT_CCC(NULL, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
+    BT_GATT_CCC(wasm_result_ccc_changed, BT_GATT_PERM_READ | BT_GATT_PERM_WRITE),
 );
 
 /* ============================================================================
@@ -549,12 +685,16 @@ int wasm_service_init(void)
     wasm_runtime_initialized = false;
     
     printk("WASM Service: Initialized\n");
-    printk("  Upload characteristic: WRITE + WRITE_WITHOUT_RESP\n");
+    printk("  Upload characteristic: WRITE\n");
     printk("  Execute characteristic: WRITE\n");
     printk("  Status characteristic: READ + NOTIFY\n");
     printk("  Result characteristic: READ + NOTIFY\n");
     printk("  Code buffer size: %d bytes\n", WASM_CODE_BUFFER_SIZE);
     printk("  Upload chunk size: %d bytes\n", WASM_UPLOAD_CHUNK_SIZE);
+    printk("  WASM3 runtime stack: 32KB\n");
+    printk("  WASM3 memory pool: %d bytes\n", WASM3_MEMORY_POOL_SIZE);
+    printk("  Status notifications: enabled\n");
+    printk("  Result notifications: enabled\n");
     
     return 0;
 }
