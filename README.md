@@ -61,6 +61,47 @@ screen /dev/tty.usbmodem* 115200
 - **BLE not advertising**: Ensure both cores are flashed (the build script handles this automatically)
 - **Serial output not visible**: Check your serial port configuration and baud rate
 
+## Testing
+
+The project includes comprehensive BLE testing with both individual scripts and pytest-based test suites. All tests are organized in the `tests/` directory.
+
+### Quick Start
+
+```bash
+# Install dependencies
+pip install -r requirements.txt
+
+# Change to tests directory
+cd tests
+
+# Run all pytest-based tests (recommended)
+python run_pytest_tests.py
+
+# Run specific test suite
+python run_pytest_tests.py --suite wasm
+
+# Run individual test files
+python test_wasm_service_basic.py
+```
+
+### Test Suites
+
+#### Pytest-Based Tests (Recommended)
+- **Shared Resources**: Single BLE connection and serial monitor across all tests
+- **Enhanced Debugging**: Real-time serial log capture and pattern matching
+- **Better Organization**: Proper test discovery, markers, and reporting
+
+#### Enhanced Tests with Serial Monitoring
+- **Complete Validation**: Tests both BLE protocol and device-side behavior
+- **Serial Pattern Matching**: Verify device logs during operations
+- **Comprehensive Coverage**: Full end-to-end workflow validation
+
+#### Individual Test Scripts
+- **Original Tests**: Standalone scripts for specific service testing
+- **Quick Testing**: Run individual services without setup overhead
+
+See `tests/README.md` for detailed testing documentation.
+
 ## Project Structure
 
 - `src/main.c` - Main application code with BLE peripheral implementation
@@ -68,3 +109,4 @@ screen /dev/tty.usbmodem* 115200
 - `CMakeLists.txt` - CMake build configuration
 - `build.sh` - Build script
 - `flash.sh` - Flash script
+- `tests/` - Comprehensive BLE testing suite

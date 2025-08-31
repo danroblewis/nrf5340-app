@@ -1,2 +1,23 @@
-bleak>=0.20.0
-asyncio
+# Requirements for pytest-based BLE tests with serial monitoring
+
+# Core testing framework
+pytest>=7.0.0
+pytest-asyncio>=0.21.0
+pytest-timeout>=2.1.0
+
+# BLE communication
+bleak>=0.19.0
+
+# Serial communication
+pyserial>=3.5
+
+# Logging and reporting
+pytest-html>=3.1.0
+pytest-json-report>=1.5.0
+
+# Code coverage (optional)
+pytest-cov>=4.0.0
+
+# Development tools
+pytest-mock>=3.10.0
+pytest-xdist>=3.0.0  # For parallel test execution

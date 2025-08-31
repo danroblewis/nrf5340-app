@@ -15,6 +15,15 @@ wasm-micro-runtime/
 *.swp
 *.swo
 
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+.pytest_cache/
+
 # OS files
 .DS_Store
 Thumbs.db
