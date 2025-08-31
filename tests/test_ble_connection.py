@@ -46,12 +46,8 @@ async def test_mtu_negotiation_results(ble_client):
     mtu = ble_client.mtu_size
     
     # Expect reasonable MTU size for modern BLE
-    if mtu == 23:
-        # Default minimum MTU
-        assert True
-    else:
-        # Allow for slightly different negotiated values
-        assert mtu > 23 and mtu <= 517
+    # MTU should be at least the minimum (23) and at most the max (517)
+    assert 23 <= mtu <= 517
 
 
 @pytest.mark.asyncio

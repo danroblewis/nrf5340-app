@@ -18,6 +18,10 @@ static uint16_t data_buffer_size = 0;
 static uint8_t transfer_status = TRANSFER_STATUS_IDLE;
 static struct bt_conn *data_conn = NULL;
 
+/* Echo buffer - stores the last uploaded data to echo back */
+static uint8_t echo_buffer[DATA_BUFFER_SIZE];
+static uint16_t echo_buffer_size = 0;
+
 /* Static download data */
 static const char *download_data = "Sample data from nRF5340 device";
 static uint16_t download_data_length = 0;
@@ -53,6 +57,11 @@ static ssize_t data_upload_handler(const void *data, uint16_t len)
     transfer_status = TRANSFER_STATUS_COMPLETE;
     printk("Data Service: Transfer complete\n");
     
+    /* Save data for echo - copy to echo buffer */
+    memcpy(echo_buffer, data_buffer, data_buffer_size);
+    echo_buffer_size = data_buffer_size;
+    printk("Data Service: Saved %d bytes for echo\n", echo_buffer_size);
+    
     /* Process received data */
     data_service_process_data(data_buffer, data_buffer_size);
     
@@ -72,20 +81,29 @@ static ssize_t data_download_handler(data_download_packet_t *response)
     printk("\n=== Data Service: data_download_handler called ===\n");
     printk("Data Service: Download request\n");
     
-    if (download_data_length == 0) {
-        download_data_length = strlen(download_data);
+    if (echo_buffer_size > 0) {
+        /* Echo back the last uploaded data */
+        uint16_t copy_len = (echo_buffer_size < sizeof(response->data)) ? 
+                            echo_buffer_size : sizeof(response->data);
+        
+        memcpy(response->data, echo_buffer, copy_len);
+        printk("Data Service: Echoing %d bytes\n", copy_len);
+        
+        return copy_len;
+    } else {
+        /* No data uploaded yet, return static message */
+        if (download_data_length == 0) {
+            download_data_length = strlen(download_data);
+        }
+        
+        uint16_t copy_len = (download_data_length < sizeof(response->data)) ? 
+                            download_data_length : sizeof(response->data);
+        
+        memcpy(response->data, download_data, copy_len);
+        printk("Data Service: Returning default %d bytes\n", copy_len);
+        
+        return copy_len;
     }
-    
-    // Copy the actual data length, not the maximum struct size
-    uint16_t copy_len = (download_data_length < sizeof(response->data)) ? 
-                        download_data_length : sizeof(response->data);
-    
-    memcpy(response->data, download_data, copy_len);
-    
-    printk("Data Service: Returning %d bytes\n", copy_len);
-    
-    // Return only the actual data length, not the full struct size
-    return copy_len;
 }
 
 // The macro will generate data_transfer_status_read() wrapper that calls this  
@@ -144,6 +162,7 @@ BT_GATT_SERVICE_DEFINE(data_service,
 int data_service_init(void)
 {
     data_buffer_size = 0;
+    echo_buffer_size = 0;
     transfer_status = TRANSFER_STATUS_IDLE;
     data_conn = NULL;
     download_data_length = strlen(download_data);
@@ -153,6 +172,7 @@ int data_service_init(void)
     printk("  Download characteristic: READ + NOTIFY\n");
     printk("  Transfer Status characteristic: READ + NOTIFY\n");
     printk("  Buffer size: %d bytes\n", DATA_BUFFER_SIZE);
+    printk("  Echo functionality: ENABLED\n");
     
     return 0;
 }

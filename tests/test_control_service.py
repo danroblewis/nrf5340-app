@@ -45,23 +45,11 @@ async def test_control_service_ping(ble_client, ble_services, serial_capture):
     command_char = characteristics[CONTROL_COMMAND_UUID]
     
     with serial_capture:
-        try:
-            # Try simple ping command
-            ping_command = struct.pack('<B', 0x01)
-            await ble_client.write_gatt_char(command_char, ping_command)
-        except Exception:
-            try:
-                # Try longer format
-                ping_command = struct.pack('<BB', 0x01, 0x00)
-                await ble_client.write_gatt_char(command_char, ping_command)
-            except Exception:
-                # Control service may have specific format requirements
-                pytest.skip("Control service command format not compatible")
-        
-            await asyncio.sleep(0.1)
-    
-    # If we get here without exception, the command was accepted
-    assert True
+        # Send GET_STATUS command using correct 20-byte packet format
+        # control_command_packet_t: cmd_id(1) + param1(1) + param2(1) + reserved(17)
+        ping_command = struct.pack('<BBB17x', 0x01, 0x00, 0x00)  # CMD_GET_STATUS with no params
+        await ble_client.write_gatt_char(command_char, ping_command)
+        await asyncio.sleep(0.1)
 
 
 @pytest.mark.asyncio
@@ -74,21 +62,16 @@ async def test_control_service_commands(ble_client, ble_services, serial_capture
     
     command_char = characteristics[CONTROL_COMMAND_UUID]
     
-    # Test commands that might be supported
+    # Test different control commands using correct 20-byte packet format
     test_commands = [
-        struct.pack('<B', 0x00),    # Possible status command
-        struct.pack('<B', 0x01),    # Possible ping command
-        struct.pack('<B', 0x02),    # Possible reset command
+        struct.pack('<BBB17x', 0x01, 0x00, 0x00),  # CMD_GET_STATUS
+        struct.pack('<BBB17x', 0x02, 0x00, 0x00),  # CMD_RESET_DEVICE  
+        struct.pack('<BBB17x', 0x03, 0x42, 0x00),  # CMD_SET_CONFIG with param
+        struct.pack('<BBB17x', 0x04, 0x00, 0x00),  # CMD_GET_VERSION
     ]
     
     with serial_capture:
+        # Send test commands - let exceptions indicate actual problems
         for cmd in test_commands:
-            try:
-                await ble_client.write_gatt_char(command_char, cmd)
-                await asyncio.sleep(0.05)
-            except Exception:
-                # Some commands may not be supported
-                continue
-    
-    # If we get here, at least some commands were accepted
-    assert True
+            await ble_client.write_gatt_char(command_char, cmd)
+            await asyncio.sleep(0.05)

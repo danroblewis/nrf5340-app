@@ -103,9 +103,10 @@
                                       void *buf, uint16_t len, uint16_t offset) \
     { \
         struct_type response; \
+        memset(&response, 0, sizeof(response)); \
         ssize_t result = handler_name(&response); \
         if (result < 0) return result; \
-        return bt_gatt_attr_read(conn, attr, buf, len, offset, &response, sizeof(response)); \
+        return bt_gatt_attr_read(conn, attr, buf, len, offset, &response, result); \
     }
 
 /* Declare clean handler function signatures */

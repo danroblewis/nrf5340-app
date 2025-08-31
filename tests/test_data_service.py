@@ -7,6 +7,9 @@ Tests for BLE Data Service (0xFFF0) - handles data upload/download operations
 
 import pytest
 import asyncio
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Service UUIDs
 DATA_SERVICE_UUID = "0000fff0-0000-1000-8000-00805f9b34fb"
@@ -33,7 +36,7 @@ def test_data_service_characteristics(ble_services):
 
 @pytest.mark.asyncio
 async def test_data_service_small_packet(ble_client, ble_services, serial_capture):
-    """Test data service with small packet"""
+    """Test data service with small packet - verify echo functionality"""
     services, characteristics = ble_services
     
     assert DATA_SERVICE_UUID in services
@@ -50,17 +53,22 @@ async def test_data_service_small_packet(ble_client, ble_services, serial_captur
         await asyncio.sleep(0.1)
         received_data = await ble_client.read_gatt_char(download_char)
     
-    # Device returns static sample data, not echo
-    expected_sample = b"Sample data from nRF5340 device"
-    if received_data.startswith(expected_sample):
-        assert True  # Expected sample data
-    else:
-        assert len(received_data) > 0  # Any response is valid
+    # Verify data echo
+    assert test_data == received_data
+    
+    # Verify expected serial output from upload workflow
+    serial_result = serial_capture.readouterr()
+    serial_output = serial_result.out
+    assert "=== Data Service: data_upload_handler called ===" in serial_output
+    assert f"Data Service: Upload received {len(test_data)} bytes" in serial_output
+    assert "Data Service: Transfer complete" in serial_output
+    assert f"Data Service: Saved {len(test_data)} bytes for echo" in serial_output
 
 
+@pytest.mark.parametrize("packet_size", [16, 32, 64, 128, 200])
 @pytest.mark.asyncio
-async def test_data_service_large_packets(ble_client, ble_services, serial_capture):
-    """Test data service with various packet sizes"""
+async def test_data_service_large_packets(ble_client, ble_services, serial_capture, packet_size):
+    """Test data service with various packet sizes - verify echo for each size"""
     services, characteristics = ble_services
     
     assert DATA_SERVICE_UUID in services
@@ -68,23 +76,29 @@ async def test_data_service_large_packets(ble_client, ble_services, serial_captu
     upload_char = characteristics[DATA_UPLOAD_UUID]
     download_char = characteristics[DATA_DOWNLOAD_UUID]
     
-    # Test different packet sizes
-    test_sizes = [16, 32, 64, 128, 200]
+    # Use varying pattern data to ensure we can detect corruption
+    test_data = bytes([i % 256 for i in range(packet_size)])
     
     with serial_capture:
-        for size in test_sizes:
-            test_data = b'X' * size
-            
-            await ble_client.write_gatt_char(upload_char, test_data)
-            await asyncio.sleep(0.05)
-            
-            received_data = await ble_client.read_gatt_char(download_char)
-            assert len(received_data) > 0
+        await ble_client.write_gatt_char(upload_char, test_data)
+        await asyncio.sleep(0.05)
+        
+        received_data = await ble_client.read_gatt_char(download_char)
+        
+        # Verify exact echo match
+        assert received_data == test_data
+    
+    # Verify expected serial output for this packet size
+    serial_result = serial_capture.readouterr()
+    serial_output = serial_result.out
+    assert f"Data Service: Upload received {packet_size} bytes" in serial_output
+    assert f"Data Service: Saved {packet_size} bytes for echo" in serial_output
+    assert "Data Service: Transfer complete" in serial_output
 
 
 @pytest.mark.asyncio
 async def test_data_service_round_trip(ble_client, ble_services, serial_capture):
-    """Test complete data service round trip"""
+    """Test complete data service round trip with data integrity verification"""
     services, characteristics = ble_services
     
     assert DATA_SERVICE_UUID in services
@@ -102,11 +116,52 @@ async def test_data_service_round_trip(ble_client, ble_services, serial_capture)
         download_char = characteristics[DATA_DOWNLOAD_UUID]
         received_data = await ble_client.read_gatt_char(download_char)
     
-    # The device returns static sample data, not an echo
-    assert len(received_data) > 0
+    # Verify exact echo match
+    assert received_data == test_data
     
-    # Check for expected sample data
-    expected_sample = b"Sample data from nRF5340 device"
-    if not received_data.startswith(expected_sample):
-        # Any response is valid - device behavior varies
-        assert len(received_data) > 0
+    # Verify round-trip workflow in serial output
+    serial_result = serial_capture.readouterr()
+    serial_output = serial_result.out
+    assert "=== Data Service: data_upload_handler called ===" in serial_output
+    assert f"Data Service: Upload received {len(test_data)} bytes" in serial_output
+    assert "Data Service: Transfer complete" in serial_output
+    assert f"Data Service: Saved {len(test_data)} bytes for echo" in serial_output
+
+
+@pytest.mark.parametrize("test_data,description", [
+    (b"Hello World", "simple_text"),
+    (b"12345678901234567890", "repeated_pattern"),
+    (bytes([i for i in range(32)]), "sequential_bytes"),
+    (b"\x00\x01\x02\x03\xff\xfe\xfd\xfc", "mixed_binary"),
+    (b"A" * 50, "repeated_character"),
+])
+@pytest.mark.asyncio
+async def test_data_service_packet_processing(ble_client, ble_services, serial_capture, test_data, description):
+    """Test that data service processes various data patterns and echoes them correctly"""
+    services, characteristics = ble_services
+    
+    assert DATA_SERVICE_UUID in services
+    assert DATA_UPLOAD_UUID in characteristics
+    assert DATA_DOWNLOAD_UUID in characteristics
+    
+    upload_char = characteristics[DATA_UPLOAD_UUID]
+    download_char = characteristics[DATA_DOWNLOAD_UUID]
+    
+    with serial_capture:
+        await ble_client.write_gatt_char(upload_char, test_data)
+        await asyncio.sleep(0.1)
+        received_data = await ble_client.read_gatt_char(download_char)
+        
+        # Verify exact echo match
+        assert received_data == test_data
+    
+    # Verify data processing workflow in serial output
+    serial_result = serial_capture.readouterr()
+    serial_output = serial_result.out
+    assert "=== Data Service: data_upload_handler called ===" in serial_output
+    assert f"Data Service: Upload received {len(test_data)} bytes" in serial_output
+    assert "Data Service: Transfer complete" in serial_output
+    assert f"Data Service: Saved {len(test_data)} bytes for echo" in serial_output
+    # Verify data processing occurred
+    assert f"Data Service: Processing {len(test_data)} bytes of data" in serial_output
+

@@ -164,7 +164,7 @@ async def ble_setup():
             break
     
     if not device:
-        pytest.skip(f"BLE device '{DEVICE_NAME}' not found")
+        pytest.fail(f"BLE device '{DEVICE_NAME}' not found")
     
     # Connect to device
     logger.info(f"🔗 Connecting to {device.address}...")
@@ -172,7 +172,7 @@ async def ble_setup():
     await client.connect(timeout=CONNECTION_TIMEOUT)
     
     if not client.is_connected:
-        pytest.skip("Failed to connect to BLE device")
+        pytest.fail("Failed to connect to BLE device")
     
     logger.info(f"✅ Connected to {DEVICE_NAME}")
     logger.info(f"📏 MTU: {client.mtu_size} bytes")

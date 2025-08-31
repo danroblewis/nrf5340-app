@@ -51,9 +51,7 @@ async def test_status_read(ble_client, ble_services):
     status_data = await ble_client.read_gatt_char(status_char)
     
     assert len(status_data) >= 12
-    
     status, error_code, bytes_received, total_size, uptime = struct.unpack('<BBHII', status_data[:12])
-    
     assert status in [0, 1, 2, 3]
     assert uptime > 0
 
@@ -61,8 +59,7 @@ async def test_status_read(ble_client, ble_services):
 @pytest.mark.asyncio
 async def test_wasm_upload(ble_client, ble_services, serial_capture):
     """Test uploading WASM file"""
-    if not WASM_ADD_FILE.exists():
-        pytest.skip("WASM test file not found")
+    assert WASM_ADD_FILE.exists(), f"WASM test file not found: {WASM_ADD_FILE}"
     
     services, characteristics = ble_services
     wasm_data = WASM_ADD_FILE.read_bytes()
@@ -87,8 +84,7 @@ async def test_wasm_upload(ble_client, ble_services, serial_capture):
 @pytest.mark.asyncio
 async def test_status_after_upload(ble_client, ble_services):
     """Test status after upload"""
-    if not WASM_ADD_FILE.exists():
-        pytest.skip("WASM test file not found")
+    assert WASM_ADD_FILE.exists(), f"WASM test file not found: {WASM_ADD_FILE}"
     
     services, characteristics = ble_services
     wasm_data = WASM_ADD_FILE.read_bytes()
@@ -111,8 +107,7 @@ async def test_status_after_upload(ble_client, ble_services):
 @pytest.mark.asyncio
 async def test_get_answer_function(ble_client, ble_services, serial_capture):
     """Test executing get_answer function"""
-    if not WASM_ADD_FILE.exists():
-        pytest.skip("WASM test file not found")
+    assert WASM_ADD_FILE.exists()
     
     services, characteristics = ble_services
     wasm_data = WASM_ADD_FILE.read_bytes()
@@ -135,27 +130,14 @@ async def test_get_answer_function(ble_client, ble_services, serial_capture):
         
         await asyncio.sleep(0.2)
     
-    # Try to read result - may fail if characteristic requires notifications
-    try:
-        result_data = await ble_client.read_gatt_char(result_char)
-        
-        assert len(result_data) >= 4
-        result_count = struct.unpack('<I', result_data[:4])[0]
-        
-        if result_count > 0:
-            result_value = struct.unpack('<I', result_data[4:8])[0]
-            assert result_value == 42  # get_answer should return 42
-    except Exception:
-        # Result characteristic may not be directly readable
-        # Just verify that execute command was accepted (no exception during write)
-        assert True
+    # Note: Result characteristic reading is not permitted (requires notification)
+    # Test passes if execute command was accepted without exception
 
 
 @pytest.mark.asyncio
 async def test_add_function(ble_client, ble_services, serial_capture):
     """Test executing add function"""
-    if not WASM_ADD_FILE.exists():
-        pytest.skip("WASM test file not found")
+    assert WASM_ADD_FILE.exists(), f"WASM test file not found: {WASM_ADD_FILE}"
     
     services, characteristics = ble_services
     wasm_data = WASM_ADD_FILE.read_bytes()
@@ -178,27 +160,14 @@ async def test_add_function(ble_client, ble_services, serial_capture):
         
         await asyncio.sleep(0.2)
     
-    # Try to read result - may fail if characteristic requires notifications
-    try:
-        result_data = await ble_client.read_gatt_char(result_char)
-        
-        assert len(result_data) >= 4
-        result_count = struct.unpack('<I', result_data[:4])[0]
-        
-        if result_count > 0:
-            result_value = struct.unpack('<I', result_data[4:8])[0]
-            assert result_value == 8  # add(5, 3) should return 8
-    except Exception:
-        # Result characteristic may not be directly readable
-        # Just verify that execute command was accepted
-        assert True
+    # Note: Result characteristic reading is not permitted (requires notification)
+    # Test passes if execute command was accepted without exception
 
 
 @pytest.mark.asyncio
 async def test_complete_wasm_workflow(ble_client, ble_services, serial_capture):
     """Test complete WASM workflow: upload, status check, execute multiple functions"""
-    if not WASM_ADD_FILE.exists():
-        pytest.skip("WASM test file not found")
+    assert WASM_ADD_FILE.exists(), f"WASM test file not found: {WASM_ADD_FILE}"
     
     services, characteristics = ble_services
     wasm_data = WASM_ADD_FILE.read_bytes()
@@ -231,8 +200,8 @@ async def test_complete_wasm_workflow(ble_client, ble_services, serial_capture):
         await ble_client.write_gatt_char(execute_char, execute_packet)
         await asyncio.sleep(0.2)
     
-    # Result reading may fail - just verify commands were sent successfully
-    assert True  # If we get here, the workflow executed without critical errors
+    # Result reading may fail - test passes if commands were sent successfully
+    # Test completes successfully if workflow executed without critical errors
 
 
 async def _upload_wasm(ble_client, upload_char, wasm_data):
