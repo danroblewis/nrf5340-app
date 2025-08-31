@@ -22,8 +22,8 @@ from collections import namedtuple
 DEVICE_NAME = "Dan5340BLE"
 SERIAL_PORT = "/dev/tty.usbmodem0010500306563"
 SERIAL_BAUD = 115200
-CONNECTION_TIMEOUT = 15.0
-DISCOVERY_TIMEOUT = 10.0
+CONNECTION_TIMEOUT = 8.0  # Reduced from 15.0
+DISCOVERY_TIMEOUT = 5.0   # Reduced from 10.0
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(levelname)s:%(name)s:%(message)s')
@@ -143,10 +143,14 @@ class SerialCapture:
         """Clear captured data"""
         self.captured_lines = []
 
-@pytest_asyncio.fixture(scope="function")
+@pytest_asyncio.fixture(scope="session")
 async def ble_setup():
-    """Setup BLE connection for each test function"""
-    logger.info("🚀 Setting up BLE connection...")
+    """Setup BLE connection once per test session"""
+    logger.info("🚀 Setting up session-scoped BLE connection...")
+    
+    # Log the event loop for debugging
+    loop = asyncio.get_running_loop()
+    logger.info(f"🔄 Session fixture using event loop: {id(loop)}")
     
     # Discover device
     logger.info(f"🔍 Scanning for BLE device: {DEVICE_NAME}...")
